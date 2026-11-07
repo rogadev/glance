@@ -25,17 +25,26 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # GitHub holds CI on a pull request the built-in token opened until a
+      # maintainer approves it. A pull request the release app opens runs CI
+      # like any other, so the release pull request only needs the merge.
+      # Without the app's client ID (a repository variable), Release Please
+      # falls back to the built-in token and the approval is needed again.
+      # Pinned to a commit: this action mints a token with write access.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        if: vars.RELEASE_APP_CLIENT_ID != ''
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       # Pinned to a commit: this action holds write access. Dependabot bumps it.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
+          token: ${{ steps.app-token.outputs.token || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: main
-      # The release pull request is opened with the built-in token, so GitHub
-      # holds its CI run for approval: approve it on the pull request (see the
-      # README's release steps). A dispatched CI run doesn't help: the pull
-      # request shows only the newest run, which is the one waiting.
 
   sync-dev:
     # The release commit (version bump, CHANGELOG.md) lands on main only.
