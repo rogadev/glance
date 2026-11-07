@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decide, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
+import { ancestorTtyFrom, decide, detectTerminal, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
 
 const T = 1_000_000;
 
@@ -31,6 +31,39 @@ const notice = (id, status = 'killed') =>
 // A Bash call with run_in_background, as PostToolUse reports it.
 const bgShell = (id) =>
   main('PostToolUse', { tool_name: 'Bash', tool_input: { run_in_background: true }, tool_response: { backgroundTaskId: id } });
+
+test('a manual /compact is working, then needs you when PostCompact arrives', () => {
+  const during = run([main('Stop'), main('PreCompact', { trigger: 'manual' })]);
+  assert.equal(during.state, WORKING);
+  assert.equal(run([main('PostCompact', { trigger: 'manual' })], during).state, ATTENTION);
+});
+
+test('a manual /compact also ends on the SessionStart (compact) that follows it', () => {
+  const during = run([main('PreCompact', { trigger: 'manual' })]);
+  assert.equal(run([main('SessionStart', { source: 'compact' })], during).state, ATTENTION);
+});
+
+test('a manual /compact with a background shell running stays working', () => {
+  const during = run([bgShell('b1'), main('Stop'), main('PreCompact', { trigger: 'manual' })]);
+  const after = run([main('PostCompact', { trigger: 'manual' })], during);
+  assert.equal(after.state, WORKING);
+  assert.deepEqual(ids(after), ['b1']);
+});
+
+test('an automatic compact mid-turn stays working until the turn stops', () => {
+  const s = run([
+    main('UserPromptSubmit'),
+    main('PreCompact', { trigger: 'auto' }),
+    main('PostCompact', { trigger: 'auto' }),
+    main('SessionStart', { source: 'compact' }),
+  ]);
+  assert.equal(s.state, WORKING);
+  assert.equal(run([main('Stop')], s).state, ATTENTION);
+});
+
+test('a subagent compacting does not tint the pane', () => {
+  assert.equal(run([main('Stop'), sub('PreCompact', 'a1', { trigger: 'auto' })]).state, ATTENTION);
+});
 
 test('a normal turn goes working, then attention on Stop', () => {
   assert.equal(run([main('UserPromptSubmit')]).state, WORKING);
@@ -274,6 +307,55 @@ test('TitleIdle never turns the pane to working', () => {
   assert.equal(after.reason, 'stop');
 });
 
+// UiIdle comes from the mod when the engine's isWorking goes false.
+const uiIdle = (idle_since, at) => ({ hook_event_name: 'UiIdle', idle_since, at });
+
+test('a /compact cancelled with Esc (no PostCompact) is cleared by UiIdle', () => {
+  // Seen live: PreCompact, then Esc, then no event at all for two minutes.
+  const s = run([main('Stop', { at: T }), main('PreCompact', { trigger: 'manual', at: T + 1000 })]);
+  assert.equal(s.state, WORKING);
+  const caught = run([uiIdle(T + 4000, T + 4000 + CONFIG.titleIdleConfirmMs + 100)], s);
+  assert.equal(caught.state, ATTENTION);
+  assert.equal(caught.reason, 'ui-idle');
+});
+
+test('UiIdle leaves the tint alone when a hook landed while it waited', () => {
+  const s = run([main('UserPromptSubmit', { at: T + 2000 })]);
+  assert.equal(run([uiIdle(T + 1000, T + 3600)], s).state, WORKING);
+});
+
+test('UiIdle never clears the tint while background work runs', () => {
+  const s = run([main('UserPromptSubmit', { at: T }), { ...bgShell('ci'), at: T + 100 }, main('Stop', { at: T + 200 })]);
+  assert.equal(run([uiIdle(T + 300, T + 60_000)], s).state, WORKING);
+});
+
+test('bash mode (no hook, only UiWorking) shows working, then needs you on Stop', () => {
+  // Seen live: ! sleep 20 sent no prompt or tool hook, then Stop when it ended.
+  const s = run([main('Stop'), main('UiWorking')]);
+  assert.equal(s.state, WORKING);
+  assert.equal(s.reason, 'ui-working');
+  assert.equal(run([main('Stop')], s).state, ATTENTION);
+});
+
+test('UiWorking never covers a question or a permission prompt', () => {
+  const asks = [
+    main('PermissionRequest', { tool_name: 'Bash' }),
+    main('PreToolUse', { tool_name: 'AskUserQuestion' }),
+    main('Elicitation'),
+    main('Notification', { notification_type: 'permission_prompt' }),
+    sub('PermissionRequest', 'a1', { tool_name: 'Bash' }),
+  ];
+  for (const ask of asks) {
+    const s = run([main('UserPromptSubmit'), ask, main('UiWorking')]);
+    assert.equal(s.state, ATTENTION, `UiWorking after ${ask.hook_event_name} ${ask.tool_name || ''}`);
+  }
+});
+
+test('UiWorking during a turn changes nothing', () => {
+  const s = run([main('UserPromptSubmit'), main('UiWorking')]);
+  assert.equal(s.reason, 'prompt');
+});
+
 test('idle_prompt is the safety net: it forces attention when no background work runs', () => {
   assert.equal(run([main('UserPromptSubmit'), main('Notification', { notification_type: 'idle_prompt' })]).state, ATTENTION);
 });
@@ -307,4 +389,73 @@ test('SessionEnd ends tracking', () => {
 test('osc gives the working color, and resets to the profile for attention', () => {
   assert.equal(osc(WORKING), `11;${CONFIG.workingColor}`);
   assert.equal(osc(ATTENTION), '111');
+});
+
+// ps -A -o pid=,ppid=,tty= on macOS ('??' for none) and Linux ('?').
+test('ancestorTtyFrom finds the nearest ancestor with a terminal', () => {
+  const mac = ['  1     0 ??', ' 500     1 ttys003', ' 600   500 ttys003', ' 700   600 ??', ' 800   700 ??'].join('\n');
+  assert.equal(ancestorTtyFrom(mac, 800), '/dev/ttys003');
+  const linux = ['1 0 ?', '40 1 pts/2', '41 40 ?', '42 41 ?'].join('\n');
+  assert.equal(ancestorTtyFrom(linux, 42), '/dev/pts/2');
+});
+
+test('ancestorTtyFrom returns null when no ancestor has a terminal, or the pid is unknown', () => {
+  assert.equal(ancestorTtyFrom('1 0 ??\n2 1 ??\n3 2 ??', 3), null);
+  assert.equal(ancestorTtyFrom('1 0 ??', 99), null);
+  assert.equal(ancestorTtyFrom('', 1), null);
+});
+
+test("ancestorTtyFrom ignores the process's own terminal and stops at a loop", () => {
+  assert.equal(ancestorTtyFrom('5 6 ttys009\n6 5 ??', 5), null);
+});
+
+test('detectTerminal names the terminal from the environment Claude inherits', () => {
+  assert.deepEqual(detectTerminal({ WT_SESSION: 'x' }), { name: 'Windows Terminal', support: 'confirmed' });
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'iTerm.app' }).name, 'iTerm2');
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'Apple_Terminal' }).support, 'unknown');
+  assert.equal(detectTerminal({ TERM: 'xterm-kitty' }).name, 'kitty');
+  assert.equal(detectTerminal({ VTE_VERSION: '7600' }).support, 'expected');
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'mintty' }).name, 'mintty (Git Bash window)');
+});
+
+test('detectTerminal puts a multiplexer or editor ahead of the window it runs in', () => {
+  // tmux inside iTerm2 is what decides whether the code gets through.
+  assert.equal(detectTerminal({ TMUX: '/tmp/tmux', TERM_PROGRAM: 'iTerm.app' }).name, 'tmux');
+  // VS Code's terminal inherits WT_SESSION when VS Code was started from Windows Terminal.
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'vscode', WT_SESSION: 'x' }).name, 'VS Code');
+});
+
+test('detectTerminal falls back to what the environment names, then to unknown', () => {
+  assert.deepEqual(detectTerminal({}, 'linux'), { name: 'unknown', support: 'unknown' });
+  assert.deepEqual(detectTerminal({ TERM: 'xterm-256color' }, 'linux'), { name: 'xterm-256color', support: 'unknown' });
+  assert.deepEqual(detectTerminal({ TERM_PROGRAM: 'Hyper' }, 'darwin'), { name: 'Hyper', support: 'unknown' });
+  assert.deepEqual(detectTerminal({}, 'win32'), { name: 'Windows console (conhost)', support: 'unknown' });
+});
+
+test('a manual /compact ends once, though PostCompact and SessionStart (compact) both arrive', () => {
+  const s = run([
+    main('PreCompact', { trigger: 'manual' }),
+    main('PostCompact', { trigger: 'manual' }),
+    main('SessionStart', { source: 'compact' }),
+  ]);
+  assert.equal(s.state, ATTENTION);
+  assert.equal(s.reason, 'compact-done');
+});
+
+test('UiWorking turns working only from a finished state, never from a fresh one', () => {
+  // A mod loaded into a session glance hasn't seen starts from init: no turn to trust.
+  assert.equal(run([main('UiWorking')]).state, ATTENTION);
+  for (const done of [
+    [main('Stop')],
+    [main('UserPromptSubmit'), main('Notification', { notification_type: 'idle_prompt' })],
+    [main('PreCompact', { trigger: 'manual' }), main('PostCompact', { trigger: 'manual' })],
+  ]) {
+    const s = run([...done, main('UiWorking')]);
+    assert.equal(s.state, WORKING, `UiWorking after ${done.map((e) => e.hook_event_name).join(', ')}`);
+  }
+});
+
+test('UiIdle with no idle_since waits out the confirm window from the last hook', () => {
+  const s = run([main('UserPromptSubmit', { at: T })]);
+  assert.equal(run([{ hook_event_name: 'UiIdle', at: T + 500 }], s).state, WORKING);
 });

@@ -22,12 +22,15 @@ export const CONFIG = {
   // Shells get less time: a dev server left running would otherwise hold the tint.
   agentTtlMs: 4 * 60 * 60 * 1000,
   shellTtlMs: 60 * 60 * 1000,
-  // How long the pane title must show idle (and no hook fire) before TitleIdle acts.
+  // How long Claude must look idle, with no hook since, before TitleIdle (the
+  // pane title) or UiIdle (the mod's isWorking) clears the tint.
   titleIdleConfirmMs: 2500,
   // The title watcher (paint.exe --watch) polls each pane's title to catch Esc.
-  // Off since the glance mod (mod/) reports Esc as TurnAborted with no polling.
+  // Off since the glance mod (hooks/register.tsx) reports Esc as TurnAborted with no polling.
   // Turn it back on for sessions that can't load the mod.
   titleWatcher: false,
+  // How long /glance-check shows the working color before putting the pane back.
+  checkFlashMs: 1500,
   stateDir: path.join(os.homedir(), '.claude', 'state', 'glance'),
   logMaxBytes: 512 * 1024,
 };
@@ -35,6 +38,11 @@ export const CONFIG = {
 export const WORKING = 'working';
 export const ATTENTION = 'attention';
 export const BACKGROUND_RUNNING = 'background-running';
+const COMPACT_MANUAL = 'compact-manual';
+
+// Needs-you reasons that mean "finished", not "asking you something", so the
+// engine starting work again (UiWorking) may turn the pane working.
+const SETTLED = new Set(['session-start', 'stop', 'stop-failure', 'aborted', 'compact-done', 'ui-idle', 'title-idle', 'reset', 'idle_prompt']);
 
 // Tools whose whole purpose is to wait for an answer from you.
 const ASKING_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
@@ -137,12 +145,29 @@ export function decide(prev, input, now) {
   const next = (state, reason) => ({ state, reason, background });
   const same = () => next(prev.state, prev.reason);
   const busy = () => holdsTint(background, now);
+  // A manual /compact ends waiting on you. An automatic one runs inside a
+  // turn, which goes on and ends with its own Stop. PostCompact and the
+  // SessionStart (compact) after it both land here; the first one clears it.
+  const compactDone = () => {
+    if (prev.reason !== COMPACT_MANUAL) return same();
+    return busy() ? next(WORKING, BACKGROUND_RUNNING) : next(ATTENTION, 'compact-done');
+  };
 
   switch (event) {
     case 'SessionStart':
       // A new or resumed process has no background work from before.
-      if (input.source === 'compact') return same();
+      // Compaction keeps the process and its background work.
+      if (input.source === 'compact') return compactDone();
       return { state: ATTENTION, reason: 'session-start', background: {} };
+
+    case 'PreCompact':
+      // /compact runs no turn (no UserPromptSubmit, no tools), so without this
+      // the pane shows needs-you for the minute or two compaction takes.
+      if (!fromMain) return same();
+      return next(WORKING, input.trigger === 'manual' ? COMPACT_MANUAL : 'compact');
+
+    case 'PostCompact':
+      return compactDone();
 
     case 'SessionEnd':
       return null;
@@ -205,7 +230,7 @@ export function decide(prev, input, now) {
       return next(ATTENTION, 'stop-failure');
 
     case 'TurnAborted':
-      // From the glance mod (mod/hooks/register.ts): you pressed Esc. No settings
+      // From the glance mod (hooks/register.tsx): you pressed Esc. No settings
       // hook fires for that, so without the mod this case is TitleIdle's job.
       return busy() ? next(WORKING, BACKGROUND_RUNNING) : next(ATTENTION, 'aborted');
 
@@ -223,19 +248,110 @@ export function decide(prev, input, now) {
       return { state: ATTENTION, reason: 'reset', background: kept };
     }
 
-    case 'TitleIdle': {
-      // From paint.exe --watch: the pane title shows Claude idle. This catches an
-      // Esc interrupt, which fires no hook. It only ever clears the tint, and only
-      // when the title has been idle for a while with no hook since.
+    case 'UiWorking':
+      // From the mod: the engine has been working for a moment (isWorking).
+      // This is how bash mode (! command) shows working: it sends no prompt or
+      // tool hook. Only a pane that's idle because something finished turns
+      // working; one waiting on a question or a prompt stays as it is.
+      if (prev.state === WORKING || !SETTLED.has(prev.reason)) return same();
+      return next(WORKING, 'ui-working');
+
+    case 'TitleIdle':
+    case 'UiIdle': {
+      // TitleIdle comes from paint.exe --watch (the pane title shows Claude
+      // idle); UiIdle from the mod (the engine's isWorking went false). Either
+      // catches an end no hook reports: an Esc, or a /compact cancelled with Esc,
+      // which sends no PostCompact. It only ever clears the tint, and only when
+      // Claude has looked idle for a while with no hook since.
       if (prev.state !== WORKING || busy()) return same();
       const quietSince = Math.max(Number(input.idle_since) || now, prev.updatedAt || 0);
       if (now - quietSince < CONFIG.titleIdleConfirmMs) return same();
-      return next(ATTENTION, 'title-idle');
+      return next(ATTENTION, event === 'UiIdle' ? 'ui-idle' : 'title-idle');
     }
 
     default:
       return same();
   }
+}
+
+// Terminals glance knows, in the order detectTerminal() tries them, and how
+// sure that the color codes (OSC 11 to set, OSC 111 to reset) work there:
+// 'confirmed' means seen working with glance, 'expected' means the terminal
+// documents both codes but nobody has confirmed glance with it yet.
+// Multiplexers and editor terminals come first: they inherit the variables of
+// the window they were started from (WT_SESSION, TERM_PROGRAM), and they decide
+// whether the code gets through.
+const TERMINALS = [
+  ['tmux', (e) => e.TMUX, 'unknown'],
+  ['GNU screen', (e) => e.STY, 'unknown'],
+  ['VS Code', (e) => e.TERM_PROGRAM === 'vscode', 'expected'],
+  ['JetBrains', (e) => /JetBrains/i.test(e.TERMINAL_EMULATOR || ''), 'unknown'],
+  ['Windows Terminal', (e) => e.WT_SESSION, 'confirmed'],
+  ['iTerm2', (e) => e.TERM_PROGRAM === 'iTerm.app', 'expected'],
+  ['macOS Terminal', (e) => e.TERM_PROGRAM === 'Apple_Terminal', 'unknown'],
+  ['WezTerm', (e) => e.TERM_PROGRAM === 'WezTerm', 'expected'],
+  ['Ghostty', (e) => e.TERM_PROGRAM === 'ghostty', 'expected'],
+  ['kitty', (e) => e.KITTY_WINDOW_ID || e.TERM === 'xterm-kitty', 'expected'],
+  ['Alacritty', (e) => e.ALACRITTY_WINDOW_ID || e.ALACRITTY_SOCKET, 'expected'],
+  ['Konsole', (e) => e.KONSOLE_VERSION, 'expected'],
+  ['mintty (Git Bash window)', (e) => e.TERM_PROGRAM === 'mintty', 'unknown'],
+  ['ConEmu', (e) => e.ConEmuPID, 'unknown'],
+  ['GNOME Terminal or another VTE terminal', (e) => e.VTE_VERSION, 'expected'],
+];
+
+/**
+ * Names the terminal from the environment Claude Code (and so each hook)
+ * inherits from it. Pure, for the tests.
+ *
+ * @param {Record<string, string | undefined>} env For example process.env.
+ * @param {string} [platform] process.platform, or another for the tests.
+ * @returns {{name: string, support: string}} support is 'confirmed',
+ *   'expected', or 'unknown'.
+ */
+export function detectTerminal(env, platform = process.platform) {
+  for (const [name, test, support] of TERMINALS) if (test(env)) return { name, support };
+  if (platform === 'win32' && !env.TERM_PROGRAM) return { name: 'Windows console (conhost)', support: 'unknown' };
+  return { name: env.TERM_PROGRAM || env.TERM || 'unknown', support: 'unknown' };
+}
+
+/**
+ * /glance-check: shows the working color for a moment, puts the pane back as
+ * glance has it, and prints what it found for the person to compare with what
+ * they saw. Changes no state.
+ */
+function check(input, stateFile) {
+  const flash = paint(osc(WORKING));
+  sleep(CONFIG.checkFlashMs);
+  let restore = '';
+  let state = emptyState();
+  withLock(stateFile + '.lock', () => {
+    state = readState(stateFile);
+    restore = paint(osc(state.state));
+  });
+  let version = 'unknown';
+  try {
+    const manifest = path.join(path.dirname(fileURLToPath(import.meta.url)), '.claude-plugin', 'plugin.json');
+    version = JSON.parse(fs.readFileSync(manifest, 'utf8')).version;
+  } catch {
+    // Reported as unknown.
+  }
+  const report = {
+    version,
+    platform: `${process.platform} ${process.arch}`,
+    node: process.version,
+    surface: input.surface || 'unknown',
+    terminal: detectTerminal(process.env),
+    painter: process.platform === 'win32' ? 'paint.exe' : 'tty',
+    flash,
+    restore,
+    flash_ms: CONFIG.checkFlashMs,
+    state: `${state.state} [${state.reason}]`,
+    background: Object.keys(liveBackground(state, Date.now())).length,
+  };
+  log(`${new Date().toISOString()} ${String(input.session_id || '').slice(0, 8)} main GlanceCheck -> ${report.state} flash:${flash} restore:${restore} terminal:${report.terminal.name}`);
+  // The state line first, as apply() prints it, so the mod's band stays current.
+  if (input.glance_via === 'mod') process.stdout.write(JSON.stringify({ state: state.state, color: CONFIG.workingColor }) + '\n');
+  process.stdout.write(JSON.stringify(report) + '\n');
 }
 
 /** The OSC body for a state, without the ESC ] prefix and BEL terminator. */
@@ -248,15 +364,84 @@ const PAINT_EXE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'paint
 const PAINT_ERRORS = { 2: 'bad-args', 3: 'no-claude-ancestor', 4: 'attach-failed', 5: 'open-failed', 6: 'write-failed' };
 
 /**
- * Paints the pane. Claude Code starts hooks with their own hidden console, so
- * writing to this process's console reaches nothing; paint.exe attaches to the
- * claude.exe ancestor's console (the visible pane) instead. See paint.cs.
+ * Paints the pane: paint.exe on Windows, the pane's terminal device on macOS
+ * and Linux. Returns 'ok' or a reason for the log.
  */
 function paint(body) {
   // Tests set GLANCE_NO_PAINT so they never repaint the pane they run in.
   if (process.env.GLANCE_NO_PAINT) return 'paint-skipped:disabled';
-  // paint.exe is Windows-only for now; other platforms log this and carry on.
-  if (process.platform !== 'win32') return `paint-skipped:${process.platform}`;
+  if (process.platform === 'win32') return paintConsole(body);
+  if (process.platform === 'darwin' || process.platform === 'linux') return paintTty(body);
+  return `paint-skipped:${process.platform}`;
+}
+
+/**
+ * Finds the terminal device of the nearest ancestor of `pid` that has one, from
+ * `ps -A -o pid=,ppid=,tty=` output. Claude Code holds the pane's terminal even
+ * when a hook it starts has none of its own. Pure, for the tests.
+ *
+ * @param {string} psOutput Lines of "pid ppid tty"; tty is '??' or '?' for none.
+ * @param {number} pid The process to start from (its own tty is not checked).
+ * @returns {string | null} For example '/dev/ttys003' or '/dev/pts/2'.
+ */
+export function ancestorTtyFrom(psOutput, pid) {
+  const procs = new Map();
+  for (const line of String(psOutput).split('\n')) {
+    const [p, pp, tty] = line.trim().split(/\s+/);
+    if (p && pp) procs.set(Number(p), { ppid: Number(pp), tty });
+  }
+  const seen = new Set([pid]);
+  let cur = procs.get(pid)?.ppid;
+  for (let depth = 0; cur && !seen.has(cur) && depth < 16; depth++) {
+    seen.add(cur);
+    const proc = procs.get(cur);
+    if (!proc) return null;
+    if (proc.tty && !/^\?+$/.test(proc.tty) && proc.tty !== '-') return `/dev/${proc.tty}`;
+    cur = proc.ppid;
+  }
+  return null;
+}
+
+/**
+ * macOS and Linux: writes ESC ] <body> BEL to the pane's terminal device. A
+ * hook that shares Claude's controlling terminal reaches it as /dev/tty;
+ * otherwise the nearest ancestor with a terminal (Claude) names the device.
+ */
+function paintTty(body) {
+  const seq = `\x1b]${body}\x07`;
+  const write = (dev) => {
+    const fd = fs.openSync(dev, 'w');
+    try {
+      fs.writeSync(fd, seq);
+    } finally {
+      fs.closeSync(fd);
+    }
+  };
+  let first;
+  try {
+    write('/dev/tty');
+    return 'ok';
+  } catch (err) {
+    first = err.code || err.message;
+  }
+  // Only runs ps (about 20 ms) when the hook has no terminal of its own.
+  const ps = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,tty='], { encoding: 'utf8', timeout: 2000 });
+  const dev = ps.status === 0 ? ancestorTtyFrom(ps.stdout, process.pid) : null;
+  if (!dev) return `paint-failed:tty-${first},no-ancestor-tty`;
+  try {
+    write(dev);
+    return 'ok';
+  } catch (err) {
+    return `paint-failed:tty-${first},${dev}-${err.code || err.message}`;
+  }
+}
+
+/**
+ * Windows. Claude Code starts hooks with their own hidden console, so writing
+ * to this process's console reaches nothing; paint.exe attaches to the
+ * claude.exe ancestor's console (the visible pane) instead. See paint.cs.
+ */
+function paintConsole(body) {
   // The watcher runs glance.mjs outside Claude's process tree, so it passes the pid.
   const args = process.env.GLANCE_CLAUDE_PID ? [body, process.env.GLANCE_CLAUDE_PID] : [body];
   const r = spawnSync(PAINT_EXE, args, { stdio: 'ignore', timeout: 2000, windowsHide: true });
@@ -272,7 +457,7 @@ function paint(body) {
  */
 function ensureWatcher(input, stateFile) {
   if (!CONFIG.titleWatcher || process.platform !== 'win32') return '';
-  if (['TitleIdle', 'TurnAborted', 'GlanceReset', 'SessionEnd'].includes(input.hook_event_name)) return '';
+  if (['TitleIdle', 'UiIdle', 'UiWorking', 'TurnAborted', 'GlanceReset', 'SessionEnd'].includes(input.hook_event_name)) return '';
   const watchFile = stateFile.replace(/\.json$/, '.watch');
   try {
     process.kill(Number(fs.readFileSync(watchFile, 'utf8')), 0);
@@ -343,6 +528,12 @@ function main() {
     fs.appendFileSync(path.join(CONFIG.stateDir, 'debug.jsonl'), raw.trim() + '\n');
   }
   const stateFile = path.join(CONFIG.stateDir, safeId(input.session_id) + '.json');
+  // /glance-check changes no state; it takes the lock only for its restore.
+  if (input.hook_event_name === 'GlanceCheck') return check(input, stateFile);
+  // UiIdle arrives the moment the engine stops working. Wait out the confirm
+  // window first, so decide() sees any hook that lands meanwhile (a new prompt,
+  // the next tool) and leaves the tint alone.
+  if (input.hook_event_name === 'UiIdle') sleep(CONFIG.titleIdleConfirmMs + 100);
   // Hooks for one session can run at the same moment (for example SubagentStart
   // and the Agent tool's PostToolUse), so read, decide, write, and paint under a
   // lock. That keeps the state file and the pane color in event order.
@@ -416,6 +607,12 @@ function apply(input, stateFile) {
   } else {
     fs.rmSync(stateFile, { force: true });
     fs.rmSync(stateFile.replace(/\.json$/, '.watch'), { force: true });
+  }
+
+  // The mod reads this to draw the desktop band (hooks/register.tsx). Settings
+  // hooks and the watcher don't send glance_via, and their stdout stays empty.
+  if (input.glance_via === 'mod') {
+    process.stdout.write(JSON.stringify({ state: next ? next.state : ATTENTION, color: CONFIG.workingColor }) + '\n');
   }
 
   if (input.hook_event_name === 'GlanceReset') {

@@ -82,3 +82,62 @@ test('unparsable input is logged, not dropped silently', (t) => {
   assert.equal(r.status, 0);
   assert.match(lastLog(state), /input-unparsable/);
 });
+
+test('events from the mod get a state line first, for the desktop band', (t) => {
+  const { dir } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const r = hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: 'smoke-3', prompt: 'hi', glance_via: 'mod' });
+  assert.deepEqual(JSON.parse(r.stdout.split('\n')[0]), { state: 'working', color: '#1F2D3D' });
+  const reset = hook(dir, { hook_event_name: 'GlanceReset', session_id: 'smoke-3', live_agents: [], glance_via: 'mod' });
+  const [state, summary] = reset.stdout.trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(state.state, 'attention');
+  assert.equal(summary.was, 'working [prompt]');
+});
+
+// A CI runner has no terminal, so this proves the macOS and Linux painter fails
+// cleanly (logged, exit 0) rather than that it paints. On Windows it would
+// paint the pane running the tests, so it's skipped there.
+test('without a terminal, the macOS and Linux painter logs why and carries on', { skip: process.platform === 'win32' }, (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const r = spawnSync(process.execPath, [GLANCE], {
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'smoke-4' }),
+    encoding: 'utf8',
+    env: { ...process.env, HOME: dir, USERPROFILE: dir },
+    stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true, // no controlling terminal, as under a CI runner
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(lastLog(state), /Stop -> attention \[stop\] bg=0 (ok|paint-failed:tty-\S+)$/);
+});
+
+test('GlanceCheck reports what it found and leaves the session state alone', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-5';
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
+  const file = path.join(state, `${sid}.json`);
+  const before = fs.readFileSync(file, 'utf8');
+  const r = hook(dir, { hook_event_name: 'GlanceCheck', session_id: sid, surface: 'terminal' });
+  const report = JSON.parse(r.stdout.trim());
+  assert.equal(report.flash, 'paint-skipped:disabled');
+  assert.equal(report.state, 'working [prompt]');
+  assert.equal(report.surface, 'terminal');
+  assert.match(report.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(typeof report.terminal.name, 'string');
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.match(lastLog(state), / smoke-5 main GlanceCheck -> working \[prompt\] flash:paint-skipped:disabled /);
+});
+
+test('UiIdle waits out the confirm window itself, then clears a pane no hook has touched since', (t) => {
+  // The mod sends UiIdle the moment isWorking goes false, with idle_since set
+  // to now; only the wait in main() makes it count.
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-6';
+  hook(dir, { hook_event_name: 'PreCompact', session_id: sid, trigger: 'manual' });
+  hook(dir, { hook_event_name: 'UiIdle', session_id: sid, idle_since: Date.now() });
+  const after = JSON.parse(fs.readFileSync(path.join(state, `${sid}.json`), 'utf8'));
+  assert.equal(after.state, 'attention');
+  assert.equal(after.reason, 'ui-idle');
+});

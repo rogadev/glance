@@ -51,21 +51,23 @@ jobs:
         node: [20, 22]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
       - name: Syntax check
         run: node --check glance.mjs && node --check schedule.mjs
-      - name: Unit and smoke tests
-        run: node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs
+      - name: Unit, smoke, and terminal tests
+        # terminal.test.mjs paints for real: into a pseudo-terminal on macOS and
+        # Linux, and into a hidden console of its own on Windows.
+        run: node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs
 
   plugin:
     name: plugin validate and test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Install Claude Code
@@ -80,7 +82,7 @@ jobs:
     name: paint.exe
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: paint.cs compiles, and the committed paint.exe was built from it
         shell: pwsh
         run: ./build.ps1 -Check
