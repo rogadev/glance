@@ -29,6 +29,8 @@ export const CONFIG = {
   // Off since the glance mod (mod/) reports Esc as TurnAborted with no polling.
   // Turn it back on for sessions that can't load the mod.
   titleWatcher: false,
+  // How long /glance-check shows the working color before putting the pane back.
+  checkFlashMs: 1500,
   stateDir: path.join(os.homedir(), '.claude', 'state', 'glance'),
   logMaxBytes: 512 * 1024,
 };
@@ -272,6 +274,82 @@ export function decide(prev, input, now) {
   }
 }
 
+// Terminals glance knows, in the order detectTerminal() tries them, and how
+// sure that the color codes (OSC 11 to set, OSC 111 to reset) work there:
+// 'confirmed' means seen working with glance, 'expected' means the terminal
+// documents both codes but nobody has confirmed glance with it yet.
+// Multiplexers and editor terminals come first: they inherit the variables of
+// the window they were started from (WT_SESSION, TERM_PROGRAM), and they decide
+// whether the code gets through.
+const TERMINALS = [
+  ['tmux', (e) => e.TMUX, 'unknown'],
+  ['GNU screen', (e) => e.STY, 'unknown'],
+  ['VS Code', (e) => e.TERM_PROGRAM === 'vscode', 'expected'],
+  ['JetBrains', (e) => /JetBrains/i.test(e.TERMINAL_EMULATOR || ''), 'unknown'],
+  ['Windows Terminal', (e) => e.WT_SESSION, 'confirmed'],
+  ['iTerm2', (e) => e.TERM_PROGRAM === 'iTerm.app', 'expected'],
+  ['macOS Terminal', (e) => e.TERM_PROGRAM === 'Apple_Terminal', 'unknown'],
+  ['WezTerm', (e) => e.TERM_PROGRAM === 'WezTerm', 'expected'],
+  ['Ghostty', (e) => e.TERM_PROGRAM === 'ghostty', 'expected'],
+  ['kitty', (e) => e.KITTY_WINDOW_ID || e.TERM === 'xterm-kitty', 'expected'],
+  ['Alacritty', (e) => e.ALACRITTY_WINDOW_ID || e.ALACRITTY_SOCKET, 'expected'],
+  ['Konsole', (e) => e.KONSOLE_VERSION, 'expected'],
+  ['mintty (Git Bash window)', (e) => e.TERM_PROGRAM === 'mintty', 'unknown'],
+  ['ConEmu', (e) => e.ConEmuPID, 'unknown'],
+  ['GNOME Terminal or another VTE terminal', (e) => e.VTE_VERSION, 'expected'],
+];
+
+/**
+ * Names the terminal from the environment Claude Code (and so each hook)
+ * inherits from it. Pure, for the tests.
+ *
+ * @param {Record<string, string | undefined>} env For example process.env.
+ * @returns {{name: string, support: string}} support is 'confirmed',
+ *   'expected', or 'unknown'.
+ */
+export function detectTerminal(env) {
+  for (const [name, test, support] of TERMINALS) if (test(env)) return { name, support };
+  if (process.platform === 'win32' && !env.TERM_PROGRAM) return { name: 'Windows console (conhost)', support: 'unknown' };
+  return { name: env.TERM_PROGRAM || env.TERM || 'unknown', support: 'unknown' };
+}
+
+/**
+ * /glance-check: shows the working color for a moment, puts the pane back as
+ * glance has it, and prints what it found for the person to compare with what
+ * they saw. Changes no state.
+ */
+function check(input, stateFile) {
+  const flash = paint(osc(WORKING));
+  sleep(CONFIG.checkFlashMs);
+  let restore = '';
+  let state = emptyState();
+  withLock(stateFile + '.lock', () => {
+    state = readState(stateFile);
+    restore = paint(osc(state.state));
+  });
+  let version = 'unknown';
+  try {
+    const manifest = path.join(path.dirname(fileURLToPath(import.meta.url)), '.claude-plugin', 'plugin.json');
+    version = JSON.parse(fs.readFileSync(manifest, 'utf8')).version;
+  } catch {
+    // Reported as unknown.
+  }
+  const report = {
+    version,
+    platform: `${process.platform} ${process.arch}`,
+    node: process.version,
+    surface: input.surface || 'unknown',
+    terminal: detectTerminal(process.env),
+    painter: process.platform === 'win32' ? 'paint.exe' : 'tty',
+    flash,
+    restore,
+    state: `${state.state} [${state.reason}]`,
+    background: Object.keys(liveBackground(state, Date.now())).length,
+  };
+  log(`${new Date().toISOString()} ${String(input.session_id || '').slice(0, 8)} main GlanceCheck -> ${report.state} flash:${flash} restore:${restore} terminal:${report.terminal.name}`);
+  process.stdout.write(JSON.stringify(report) + '\n');
+}
+
 /** The OSC body for a state, without the ESC ] prefix and BEL terminator. */
 export function osc(state) {
   const color = state === WORKING ? CONFIG.workingColor : CONFIG.attentionColor;
@@ -449,6 +527,7 @@ function main() {
   // Hooks for one session can run at the same moment (for example SubagentStart
   // and the Agent tool's PostToolUse), so read, decide, write, and paint under a
   // lock. That keeps the state file and the pane color in event order.
+  if (input.hook_event_name === 'GlanceCheck') return check(input, stateFile);
   // UiIdle arrives the moment the engine stops working. Wait out the confirm
   // window first, so decide() sees any hook that lands meanwhile (a new prompt,
   // the next tool) and leaves the tint alone.

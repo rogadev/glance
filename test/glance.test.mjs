@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ancestorTtyFrom, decide, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
+import { ancestorTtyFrom, decide, detectTerminal, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
 
 const T = 1_000_000;
 
@@ -407,4 +407,20 @@ test('ancestorTtyFrom returns null when no ancestor has a terminal, or the pid i
 
 test("ancestorTtyFrom ignores the process's own terminal and stops at a loop", () => {
   assert.equal(ancestorTtyFrom('5 6 ttys009\n6 5 ??', 5), null);
+});
+
+test('detectTerminal names the terminal from the environment Claude inherits', () => {
+  assert.deepEqual(detectTerminal({ WT_SESSION: 'x' }), { name: 'Windows Terminal', support: 'confirmed' });
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'iTerm.app' }).name, 'iTerm2');
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'Apple_Terminal' }).support, 'unknown');
+  assert.equal(detectTerminal({ TERM: 'xterm-kitty' }).name, 'kitty');
+  assert.equal(detectTerminal({ VTE_VERSION: '7600' }).support, 'expected');
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'mintty' }).name, 'mintty (Git Bash window)');
+});
+
+test('detectTerminal puts a multiplexer or editor ahead of the window it runs in', () => {
+  // tmux inside iTerm2 is what decides whether the code gets through.
+  assert.equal(detectTerminal({ TMUX: '/tmp/tmux', TERM_PROGRAM: 'iTerm.app' }).name, 'tmux');
+  // VS Code's terminal inherits WT_SESSION when VS Code was started from Windows Terminal.
+  assert.equal(detectTerminal({ TERM_PROGRAM: 'vscode', WT_SESSION: 'x' }).name, 'VS Code');
 });

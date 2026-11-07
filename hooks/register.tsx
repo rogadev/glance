@@ -30,6 +30,7 @@ export function parsePane(stdout: string): Pane | null {
 }
 
 const FIX = 'glance-fix'
+const CHECK = 'glance-check'
 const LIVE: ReadonlySet<string> = new Set(['pending', 'running', 'waiting'])
 
 type Summary = { was?: string; dropped?: string[]; kept?: string[]; paint?: string }
@@ -48,6 +49,56 @@ export function describe(stdout: string): string {
   if (r.paint !== 'ok') lines.push(`Painting failed (${r.paint}); see ~/.claude/state/glance/events.log.`)
   return lines.join('\n')
 }
+
+type Check = {
+  version?: string
+  platform?: string
+  node?: string
+  surface?: string
+  terminal?: { name: string; support: string }
+  painter?: string
+  flash?: string
+  restore?: string
+  state?: string
+  background?: number
+}
+
+const SUPPORT: Record<string, string> = {
+  confirmed: 'confirmed working with glance',
+  expected: 'should work (it supports the color codes), not yet confirmed with glance',
+  unknown: 'not known to work yet',
+}
+
+/** Turns glance.mjs's /glance-check report into the command's output. */
+export function describeCheck(stdout: string): string {
+  let r: Check
+  try {
+    r = JSON.parse(stdout.trim().split('\n').pop() || '')
+  } catch {
+    return `glance-check: glance.mjs gave no report. Output: ${stdout.slice(0, 200) || '(empty)'}`
+  }
+  const lines: string[] = []
+  if (r.surface === 'desktop') {
+    lines.push('In Claude Desktop, glance draws a band above the prompt while Claude works, instead of tinting a terminal.')
+  } else if (r.flash === 'ok' && r.restore === 'ok') {
+    lines.push('glance showed the working color for 1.5 seconds, then put the pane back. Did you see the background change and change back?')
+    lines.push("If you didn't, your terminal ignores the color codes: open an issue at https://github.com/rogadev/glance/issues with this report.")
+  } else {
+    lines.push(`glance couldn't paint this pane (${r.flash}). Open an issue at https://github.com/rogadev/glance/issues with this report.`)
+  }
+  const term = r.terminal ? `${r.terminal.name}: ${SUPPORT[r.terminal.support] || r.terminal.support}` : 'unknown'
+  lines.push(
+    '',
+    `Terminal: ${term}`,
+    `Painter: ${r.painter} (flash ${r.flash}, restore ${r.restore})`,
+    `Now: ${r.state}, ${r.background ?? 0} background item(s)`,
+    `glance ${r.version} on ${r.platform}, Node ${r.node}, surface ${r.surface}`,
+  )
+  return lines.join('\n')
+}
+
+// The surface the prompt band last drew on, for /glance-check's report.
+let lastSurface = 'unknown'
 
 // Set once glance.mjs can't be started (most often: no `node` on PATH), so
 // the warning shows once per load instead of on every event.
@@ -79,6 +130,9 @@ async function glance($: EngineInterface, input: object) {
 // sent, and a count of the changes, so a stale wait can tell it was overtaken.
 let uiWorking: boolean | undefined
 let uiChanges = 0
+// How many of glance's own commands are running. They keep the engine busy
+// for a second or two (isWorking), which isn't Claude working.
+let ownCommands = 0
 
 /** How long isWorking must stay true before it counts: /exit and the like flip it briefly. */
 const WORKING_SETTLE_MS = 1500
@@ -96,7 +150,7 @@ async function noteWorking($: EngineInterface, working: boolean) {
   try {
     if (working) {
       await $.clock.sleep(WORKING_SETTLE_MS)
-      if (change !== uiChanges) return
+      if (change !== uiChanges || ownCommands > 0) return
     }
     const session_id = await $.session.id()
     await glance($, { hook_event_name: working ? 'UiWorking' : 'UiIdle', session_id, idle_since })
@@ -144,6 +198,11 @@ export const register: Register = (on) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
+      name: CHECK,
+      description: 'Show the working color for a moment and report what glance found, to check it works in your terminal',
+      immediate: true,
+    })
+    await $.command.register({
       name: FIX,
       description: 'Reset a stuck glance tint: drop stale background work and repaint as needs-you',
       // Runs even while a turn is in flight, in case the stuck part is the turn.
@@ -152,11 +211,31 @@ export const register: Register = (on) => {
     return next(e)
   })
 
+  on('command.run', { command: CHECK }, async ($) => {
+    const session_id = await $.session.id()
+    ownCommands++
+    let r
+    try {
+      r = await glance($, { hook_event_name: 'GlanceCheck', session_id, surface: lastSurface })
+    } finally {
+      ownCommands--
+    }
+    if (!r) return { text: 'glance-check: could not run glance.mjs. Is Node.js installed and on PATH?' }
+    if (r.exitCode !== 0) return { text: `glance-check: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
+    return { text: describeCheck(r.stdout) }
+  }).catch((_$, _e, next) => ({ text: `glance-check failed: ${String(next.error)}` }))
+
   on('command.run', { command: FIX }, async ($) => {
     const session_id = await $.session.id()
     const agents = await $.agent.list()
     const live_agents = agents.filter((a) => LIVE.has(a.status)).map((a) => a.id)
-    const r = await glance($, { hook_event_name: 'GlanceReset', session_id, live_agents })
+    ownCommands++
+    let r
+    try {
+      r = await glance($, { hook_event_name: 'GlanceReset', session_id, live_agents })
+    } finally {
+      ownCommands--
+    }
     if (!r) return { text: 'glance-fix: could not run glance.mjs. Is Node.js installed and on PATH?' }
     if (r.exitCode !== 0) return { text: `glance-fix: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     return { text: describe(r.stdout) }
@@ -170,6 +249,7 @@ export const register: Register = (on) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Not awaited: drawing shouldn't wait on glance.mjs, which sleeps on UiIdle.
     void noteWorking($, e.props.isWorking)
+    lastSurface = e.surface
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     const now = await read($, pane)
     if (now.state !== 'working') return next(e)

@@ -9,10 +9,7 @@ The rule is lopsided on purpose. A pane that looks busy when it's really waiting
 
 ## Requirements
 
-- One of:
-  - **Windows** with **Windows Terminal** (verified).
-  - **macOS or Linux** in a terminal that supports `OSC 11` and `OSC 111`, such as iTerm2, Ghostty, kitty, WezTerm, or GNOME Terminal. Built and tested in CI, but **not yet confirmed on a real Mac**; if the tint doesn't change or doesn't clear, open an issue with the end of `~/.claude/state/glance/events.log`. macOS Terminal.app may not support `OSC 111`, so its tint may not clear.
-  - **The Claude desktop app** (its local Code sessions): no terminal to tint, so glance draws a slate "Claude is working" band above the prompt instead. Tested with the mod test kit, **not yet confirmed in the app**.
+- A terminal that honors the color codes `OSC 11` (set the background) and `OSC 111` (reset it), on Windows, macOS, or Linux, or the Claude desktop app. See [Where it works](#where-it-works), and run `/glance-check` to find out for yours.
 - **Node.js 20 or later** on `PATH`. glance's hook script runs on Node.
 - **Claude Code 2.1.319 or later.**
 
@@ -33,6 +30,27 @@ claude plugin install glance --marketplace rogadev/glance
 In the Claude desktop app, where `/plugin` doesn't run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `rogadev/glance`, then **Add plugin**. There, glance shows its band above the prompt while Claude works, and `/glance-fix` works the same way.
 
 Sessions you start after the install are tinted.
+
+## Where it works
+
+glance paints the terminal window Claude Code runs in, so what matters is the window (and anything in between, such as tmux), not your shell: PowerShell, cmd, Git Bash, zsh, and fish inside the same window all behave the same.
+
+| Where | Status |
+|---|---|
+| Windows Terminal (Windows 10 and 11) | Confirmed |
+| macOS and Linux: iTerm2, Ghostty, kitty, WezTerm, Alacritty, Konsole, GNOME Terminal and other VTE terminals | Expected: they document both color codes, and CI proves glance sends the codes to a real pseudo-terminal on macOS and Linux. Not yet confirmed on screen |
+| VS Code's terminal | Expected (its terminal supports both codes); not yet confirmed |
+| macOS Terminal | Unknown: it may not support the reset code, so the tint may not clear |
+| tmux, GNU screen | Unknown: a multiplexer may keep the codes to itself rather than pass them to your window |
+| Git Bash's own window (mintty), ConEmu, the legacy Windows console, JetBrains terminals | Unknown. On Windows, glance paints through the console Claude runs in; whether these windows show it is untested |
+| Claude desktop app | Draws a slate "Claude is working" band above the prompt instead of a tint (no terminal to paint). Tested with the mod test kit, not yet confirmed in the app |
+| WSL | Runs the macOS and Linux painter inside WSL, so it should behave like the window WSL runs in. Untested |
+
+If yours is unknown or doesn't work, run `/glance-check` and open an issue with its report.
+
+## Check it works: `/glance-check`
+
+Type `/glance-check` in a session. glance shows the working color for 1.5 seconds, then puts the pane back, and prints a report: the terminal it detected and what's known about it, whether painting succeeded, the current state, and your glance, Node, and system versions. If the painting succeeded but you didn't see the color change, your terminal ignores the codes; the report is what an issue needs. It changes no state.
 
 ## Fix a stuck tint: `/glance-fix`
 
@@ -83,6 +101,7 @@ There's also a long-lived **title watcher** (`paint.exe --watch`), **off** by de
 | `TitleIdle` (from the watcher) | Needs you (`title-idle`) if working, no background work, and the title has been idle 2.5 s since the last hook; otherwise nothing. It never turns a pane to working. |
 | `StopFailure` | Needs you |
 | `TurnAborted` (from the mod) | Needs you (`aborted`), unless background work is still live |
+| `GlanceCheck` (from `/glance-check`) | Shows the working color for 1.5 s, then repaints the current state and reports; changes no state |
 | `GlanceReset` (from `/glance-fix`) | Needs you (`reset`); keeps only agents the engine still lists as running, drops every shell and scheduled run |
 | `SessionEnd` | Reset to the profile background; delete the state file |
 
@@ -122,6 +141,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - Removing the settings hooks cuts glance off from sessions that are already open, and the mod doesn't load into them (see above). Each such pane froze on whatever it showed last: one stayed working while it asked a question. Restart open sessions after switching from settings hooks to the mod.
 
 - `/compact` runs no turn: it sends no `UserPromptSubmit` and no tool events, so before glance handled `PreCompact` the pane showed needs-you for the whole compaction (19:37 to 19:39Z, user's screenshot). The log showed `SessionStart` with `source: compact` and a `SubagentStop` for the summarizer at the end.
+- `/glance-check` keeps the engine busy (`isWorking`) for about 1.6 s, which alone tripped `UiWorking` and turned the pane working (live harness, 20:15Z). The mod now ignores `isWorking` while its own commands run.
 - Live harness (`test/live/run.mjs`, 19:56 to 20:11Z): the mod receives `classic.PreCompact`. Esc during a `/compact` sends nothing at all: no `PostCompact`, no `TurnAborted`, and no `idle_prompt` within two minutes, so the pane stayed working while the window sat idle. In one run a `PostCompact` came 2.5 minutes after the Esc. The engine's `isWorking` (on the `AbovePrompt` band's props) does go false at the Esc, hence `UiIdle`. Bash mode (`! sleep 20`) sends no `UserPromptSubmit` or tool event either, only a `Stop` when the command ends, but `isWorking` is true while it runs, hence `UiWorking`. Esc during a normal turn sends `TurnAborted`, as before. `/exit` also sets `isWorking` for a moment, hence the 1.5 s wait before `UiWorking` counts.
 
 ## Open questions

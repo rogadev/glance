@@ -110,3 +110,21 @@ test('without a terminal, the macOS and Linux painter logs why and carries on', 
   assert.equal(r.status, 0, r.stderr);
   assert.match(lastLog(state), /Stop -> attention \[stop\] bg=0 (ok|paint-failed:tty-\S+)$/);
 });
+
+test('GlanceCheck reports what it found and leaves the session state alone', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-5';
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
+  const file = path.join(state, `${sid}.json`);
+  const before = fs.readFileSync(file, 'utf8');
+  const r = hook(dir, { hook_event_name: 'GlanceCheck', session_id: sid, surface: 'terminal' });
+  const report = JSON.parse(r.stdout.trim());
+  assert.equal(report.flash, 'paint-skipped:disabled');
+  assert.equal(report.state, 'working [prompt]');
+  assert.equal(report.surface, 'terminal');
+  assert.match(report.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(typeof report.terminal.name, 'string');
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.match(lastLog(state), / smoke-5 main GlanceCheck -> working \[prompt\] flash:paint-skipped:disabled /);
+});

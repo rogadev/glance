@@ -189,3 +189,29 @@ test('the band reports the engine starting and stopping work, once per change', 
   await draw(false, 1700)
   expect(sent().slice(before + 2)).toEqual(['UiIdle'])
 })
+
+test('/glance-check sends GlanceCheck with the surface and explains the report', async ($, on) => {
+  const runs: any[] = []
+  const report = {
+    version: '0.1.0',
+    platform: 'darwin arm64',
+    node: 'v22.0.0',
+    surface: 'terminal',
+    terminal: { name: 'iTerm2', support: 'expected' },
+    painter: 'tty',
+    flash: 'ok',
+    restore: 'ok',
+    state: 'attention [stop]',
+    background: 0,
+  }
+  engine(on, runs, JSON.stringify(report) + '\n')
+  engineBand(on)
+  on('command.run', () => ({ text: 'engine ran it' }))
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking: false } })
+  await ui.unmount()
+  const r = await $.command.run({ command: 'glance-check' })
+  const sent = runs.map(stdinOf).find((s) => s.hook_event_name === 'GlanceCheck')
+  expect(sent).toEqual({ hook_event_name: 'GlanceCheck', session_id: 'sess-1', surface: 'terminal', glance_via: 'mod' })
+  expect(r.text).toContain('Did you see the background change')
+  expect(r.text).toContain('iTerm2: should work')
+})

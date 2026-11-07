@@ -50,6 +50,13 @@ const SCENARIOS = {
       ['expect', /-> attention \[(ui-idle|compact-done)\]/, 15_000],
     ],
   },
+  'check': {
+    about: '/glance-check paints this window and puts it back',
+    steps: [
+      ['say', '/glance-check'],
+      ['expect', /GlanceCheck -> attention \[session-start\] flash:ok restore:ok/, 20_000],
+    ],
+  },
   'bash-mode': {
     about: 'a bash-mode command (! sleep 20), which sends no hook, shows working, then needs-you',
     steps: [
