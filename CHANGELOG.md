@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/rogadev/glance/compare/v0.1.0...v0.2.0) (2026-11-07)
+
+
+### Features
+
+* add a plugin icon ([791f40f](https://github.com/rogadev/glance/commit/791f40f0297a4735b76845497987221812dfb9d0))
+
+
+### Bug Fixes
+
+* **ci:** drop the release CI dispatch that failed the Release run ([99b6800](https://github.com/rogadev/glance/commit/99b6800857c004df03419d1e3b7a89dec8c80138))
+
 ## 0.1.0 (2026-11-07)
 
 
