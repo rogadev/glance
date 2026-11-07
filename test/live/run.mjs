@@ -134,6 +134,8 @@ async function runScenario(name, exe) {
   console.log(`\n== ${name}: ${about}`);
   const pid = start(cwd, sessionId);
   let failed = '';
+  // What the window showed when a step failed, so the report says why.
+  let lastScreen = '';
   try {
     if (!(await waitFor(/SessionStart/, 30_000))) await clearDialogs();
     await sleep(2000);
@@ -153,6 +155,7 @@ async function runScenario(name, exe) {
         // A missed 'until' means the scenario can't go on either.
         if (!ok) {
           failed = `no line matching ${arg} within ${ms / 1000} s`;
+          lastScreen = screen();
           break;
         }
       }
@@ -169,8 +172,11 @@ async function runScenario(name, exe) {
     } catch {
       // Exited on its own.
     }
+    // Claude Code keeps each session's transcript in a folder named after its
+    // working directory (every character but letters and digits as '-').
+    const transcripts = path.join(os.homedir(), '.claude', 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'));
     // A command the session started (sleep) can hold the folder a moment longer.
-    for (const p of [cwd, screenFile]) {
+    for (const p of [cwd, screenFile, transcripts]) {
       try {
         fs.rmSync(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
       } catch (err) {
@@ -179,6 +185,11 @@ async function runScenario(name, exe) {
     }
   }
   for (const l of linesFor(sessionId)) console.log(`   ${l}`);
+  if (failed) {
+    const shown = lastScreen.split('\n').filter((l) => l.trim()).slice(-15);
+    console.log('   Screen at the failure:');
+    for (const l of shown.length ? shown : ['(the window was already gone)']) console.log(`   | ${l}`);
+  }
   console.log(failed ? `FAIL ${name}: ${failed}` : `PASS ${name}`);
   return !failed;
 }

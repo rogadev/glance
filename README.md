@@ -181,7 +181,7 @@ Each layer has its own test, from the rules out to the screen:
 | What Claude Code sends | Keys and commands whose events nobody knows yet | `test/live/run.mjs` | Locally, on Windows |
 | What a terminal shows | A terminal that ignores the color code | You, looking at the pane | By hand |
 
-`node test/live/run.mjs` runs a real, interactive Claude Code session for each scenario in a minimized window, types into it without taking focus (`test/live/console.cs`, built on the fly with the `csc.exe` that ships with Windows), and checks the lines glance logged for that session. It signs in as you and spends a few cents of tokens per scenario, so CI doesn't run it. Add a scenario when you want to know what Claude Code does for some key or command, and record what you learn under "Things verified by experiment".
+`node test/live/run.mjs` runs a real, interactive Claude Code session for each scenario in a minimized window, types into it without taking focus (`test/live/console.cs`, built on the fly with the `csc.exe` that ships with Windows), and checks the lines glance logged for that session. It signs in as you and spends a few cents of tokens per scenario, so CI doesn't run it. Add a scenario when you want to know what Claude Code does for some key or command, and record what you learn under "Things verified by experiment". Now and then a harness session ends on its own a second or two after its first prompt (twice in about fifteen runs, cause unknown); the scenario then fails with `SessionEnd` in its lines and prints the window's last screen, and a rerun passes. Each run removes its scratch folder and the transcript Claude Code saved for it.
 
 ### Developing locally
 
