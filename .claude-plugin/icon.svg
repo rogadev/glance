@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="glance">
+  <!-- A terminal pane in glance's working color, with a prompt and cursor. -->
+  <rect x="4" y="8" width="56" height="48" rx="8" fill="#1F2D3D"/>
+  <rect x="4" y="8" width="56" height="10" rx="8" fill="#2E4258"/>
+  <rect x="4" y="14" width="56" height="4" fill="#2E4258"/>
+  <circle cx="12" cy="13" r="2" fill="#8FA3B8"/>
+  <circle cx="19" cy="13" r="2" fill="#8FA3B8"/>
+  <path d="M15 30 L23 36 L15 42" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="28" y="40" width="14" height="4" rx="2" fill="#FFFFFF"/>
+</svg>
