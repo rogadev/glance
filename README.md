@@ -126,6 +126,10 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - A schedule due more than an hour out shows needs-you until something else fires a hook (there's no timer to re-tint the pane as the run approaches).
 - The cron offset is taken once, when the job is created, so a recurring cron that crosses a daylight-saving change is off by an hour until it's recreated (jobs expire after 7 days anyway).
 - A background dev server left running holds the tint for up to an hour after the turn ends (the shell TTL), unless you run `/glance-fix`.
+- After you approve a permission prompt, the pane stays on needs-you until that tool finishes, so a long approved command looks idle. No event marks the approval: `tool.check` runs before the prompt, and `ui.press` and `ui.select` only cover components a plugin draws.
+- A `/compact` cancelled with Esc, or one that fails, may send no `PostCompact`, leaving the pane working. The `idle_prompt` notification (about a minute) should clear it; not yet seen live.
+- Bash mode (`! command`) may run with no hook at all, as `/compact` did, so a long command would show needs-you. Not yet tested.
+- Agent teams are untested: whether teammates send `SubagentStart`, and what `TeammateIdle` should mean for the lead's pane. `TaskCreated` and `TaskCompleted` are task-list events, not busy signals, so glance ignores them. `PermissionDenied` (a rule or auto mode refusing a tool) needs nothing: Claude keeps working.
 - The title watcher depends on Claude Code's title glyphs. If a release changes them, `TitleIdle` stops firing. The log shows whether `TitleIdle` lines still appear.
 
 ## Contributing
