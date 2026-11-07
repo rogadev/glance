@@ -5,8 +5,8 @@ on:
     branches: [dev, main]
   pull_request:
     branches: [dev, main]
-  # release.yml dispatches this on Release Please's branch: GitHub runs no
-  # workflows for a pull request that the built-in token opened.
+  # For a manual run on any branch. It doesn't satisfy a pull request's
+  # required check: approve the pull request's own run instead (README).
   workflow_dispatch:
 
 permissions:
