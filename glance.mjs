@@ -22,7 +22,8 @@ export const CONFIG = {
   // Shells get less time: a dev server left running would otherwise hold the tint.
   agentTtlMs: 4 * 60 * 60 * 1000,
   shellTtlMs: 60 * 60 * 1000,
-  // How long the pane title must show idle (and no hook fire) before TitleIdle acts.
+  // How long Claude must look idle, with no hook since, before TitleIdle (the
+  // pane title) or UiIdle (the mod's isWorking) clears the tint.
   titleIdleConfirmMs: 2500,
   // The title watcher (paint.exe --watch) polls each pane's title to catch Esc.
   // Off since the glance mod (mod/) reports Esc as TurnAborted with no polling.
@@ -36,6 +37,10 @@ export const WORKING = 'working';
 export const ATTENTION = 'attention';
 export const BACKGROUND_RUNNING = 'background-running';
 const COMPACT_MANUAL = 'compact-manual';
+
+// Needs-you reasons that mean "finished", not "asking you something", so the
+// engine starting work again (UiWorking) may turn the pane working.
+const SETTLED = new Set(['session-start', 'stop', 'stop-failure', 'aborted', 'compact-done', 'ui-idle', 'title-idle', 'reset', 'idle_prompt']);
 
 // Tools whose whole purpose is to wait for an answer from you.
 const ASKING_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
@@ -241,14 +246,25 @@ export function decide(prev, input, now) {
       return { state: ATTENTION, reason: 'reset', background: kept };
     }
 
-    case 'TitleIdle': {
-      // From paint.exe --watch: the pane title shows Claude idle. This catches an
-      // Esc interrupt, which fires no hook. It only ever clears the tint, and only
-      // when the title has been idle for a while with no hook since.
+    case 'UiWorking':
+      // From the mod: the engine has been working for a moment (isWorking).
+      // This is how bash mode (! command) shows working: it sends no prompt or
+      // tool hook. Only a pane that's idle because something finished turns
+      // working; one waiting on a question or a prompt stays as it is.
+      if (prev.state === WORKING || !SETTLED.has(prev.reason)) return same();
+      return next(WORKING, 'ui-working');
+
+    case 'TitleIdle':
+    case 'UiIdle': {
+      // TitleIdle comes from paint.exe --watch (the pane title shows Claude
+      // idle); UiIdle from the mod (the engine's isWorking went false). Either
+      // catches an end no hook reports: an Esc, or a /compact cancelled with Esc,
+      // which sends no PostCompact. It only ever clears the tint, and only when
+      // Claude has looked idle for a while with no hook since.
       if (prev.state !== WORKING || busy()) return same();
       const quietSince = Math.max(Number(input.idle_since) || now, prev.updatedAt || 0);
       if (now - quietSince < CONFIG.titleIdleConfirmMs) return same();
-      return next(ATTENTION, 'title-idle');
+      return next(ATTENTION, event === 'UiIdle' ? 'ui-idle' : 'title-idle');
     }
 
     default:
@@ -359,7 +375,7 @@ function paintConsole(body) {
  */
 function ensureWatcher(input, stateFile) {
   if (!CONFIG.titleWatcher || process.platform !== 'win32') return '';
-  if (['TitleIdle', 'TurnAborted', 'GlanceReset', 'SessionEnd'].includes(input.hook_event_name)) return '';
+  if (['TitleIdle', 'UiIdle', 'UiWorking', 'TurnAborted', 'GlanceReset', 'SessionEnd'].includes(input.hook_event_name)) return '';
   const watchFile = stateFile.replace(/\.json$/, '.watch');
   try {
     process.kill(Number(fs.readFileSync(watchFile, 'utf8')), 0);
@@ -433,6 +449,10 @@ function main() {
   // Hooks for one session can run at the same moment (for example SubagentStart
   // and the Agent tool's PostToolUse), so read, decide, write, and paint under a
   // lock. That keeps the state file and the pane color in event order.
+  // UiIdle arrives the moment the engine stops working. Wait out the confirm
+  // window first, so decide() sees any hook that lands meanwhile (a new prompt,
+  // the next tool) and leaves the tint alone.
+  if (input.hook_event_name === 'UiIdle') sleep(CONFIG.titleIdleConfirmMs + 100);
   withLock(stateFile + '.lock', () => apply(input, stateFile));
   if (input.hook_event_name === 'SessionStart') pruneOldStates();
 }

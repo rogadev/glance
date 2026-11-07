@@ -75,6 +75,37 @@ async function glance($: EngineInterface, input: object) {
   }
 }
 
+// The engine's isWorking as the prompt band last saw it, so only changes are
+// sent, and a count of the changes, so a stale wait can tell it was overtaken.
+let uiWorking: boolean | undefined
+let uiChanges = 0
+
+/** How long isWorking must stay true before it counts: /exit and the like flip it briefly. */
+const WORKING_SETTLE_MS = 1500
+
+/**
+ * Tells glance.mjs when the engine starts or stops working, for what sends no
+ * hook. Starting covers bash mode (! command); stopping covers a /compact
+ * cancelled with Esc. glance.mjs decides whether either changes the color.
+ */
+async function noteWorking($: EngineInterface, working: boolean) {
+  if (working === uiWorking) return
+  uiWorking = working
+  const change = ++uiChanges
+  const idle_since = Date.now()
+  try {
+    if (working) {
+      await $.clock.sleep(WORKING_SETTLE_MS)
+      if (change !== uiChanges) return
+    }
+    const session_id = await $.session.id()
+    await glance($, { hook_event_name: working ? 'UiWorking' : 'UiIdle', session_id, idle_since })
+  } catch (err: unknown) {
+    // Nobody awaits this, so a throw would go unreported; log it instead.
+    $.ui.log(`glance: could not report isWorking=${working}: ${String(err)}`, { to: 'debug' })
+  }
+}
+
 /** A hook's .catch: let the event go on as if glance weren't there. */
 function failOpen<E, R>(_$: EngineInterface, e: E, next: (e: E) => R): R {
   return next(e)
@@ -137,6 +168,8 @@ export const register: Register = (on) => {
    * otherwise (needs you). The terminal is tinted by glance.mjs, so it passes.
    */
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // Not awaited: drawing shouldn't wait on glance.mjs, which sleeps on UiIdle.
+    void noteWorking($, e.props.isWorking)
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     const now = await read($, pane)
     if (now.state !== 'working') return next(e)

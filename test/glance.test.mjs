@@ -307,6 +307,55 @@ test('TitleIdle never turns the pane to working', () => {
   assert.equal(after.reason, 'stop');
 });
 
+// UiIdle comes from the mod when the engine's isWorking goes false.
+const uiIdle = (idle_since, at) => ({ hook_event_name: 'UiIdle', idle_since, at });
+
+test('a /compact cancelled with Esc (no PostCompact) is cleared by UiIdle', () => {
+  // Seen live: PreCompact, then Esc, then no event at all for two minutes.
+  const s = run([main('Stop', { at: T }), main('PreCompact', { trigger: 'manual', at: T + 1000 })]);
+  assert.equal(s.state, WORKING);
+  const caught = run([uiIdle(T + 4000, T + 4000 + CONFIG.titleIdleConfirmMs + 100)], s);
+  assert.equal(caught.state, ATTENTION);
+  assert.equal(caught.reason, 'ui-idle');
+});
+
+test('UiIdle leaves the tint alone when a hook landed while it waited', () => {
+  const s = run([main('UserPromptSubmit', { at: T + 2000 })]);
+  assert.equal(run([uiIdle(T + 1000, T + 3600)], s).state, WORKING);
+});
+
+test('UiIdle never clears the tint while background work runs', () => {
+  const s = run([main('UserPromptSubmit', { at: T }), { ...bgShell('ci'), at: T + 100 }, main('Stop', { at: T + 200 })]);
+  assert.equal(run([uiIdle(T + 300, T + 60_000)], s).state, WORKING);
+});
+
+test('bash mode (no hook, only UiWorking) shows working, then needs you on Stop', () => {
+  // Seen live: ! sleep 20 sent no prompt or tool hook, then Stop when it ended.
+  const s = run([main('Stop'), main('UiWorking')]);
+  assert.equal(s.state, WORKING);
+  assert.equal(s.reason, 'ui-working');
+  assert.equal(run([main('Stop')], s).state, ATTENTION);
+});
+
+test('UiWorking never covers a question or a permission prompt', () => {
+  const asks = [
+    main('PermissionRequest', { tool_name: 'Bash' }),
+    main('PreToolUse', { tool_name: 'AskUserQuestion' }),
+    main('Elicitation'),
+    main('Notification', { notification_type: 'permission_prompt' }),
+    sub('PermissionRequest', 'a1', { tool_name: 'Bash' }),
+  ];
+  for (const ask of asks) {
+    const s = run([main('UserPromptSubmit'), ask, main('UiWorking')]);
+    assert.equal(s.state, ATTENTION, `UiWorking after ${ask.hook_event_name} ${ask.tool_name || ''}`);
+  }
+});
+
+test('UiWorking during a turn changes nothing', () => {
+  const s = run([main('UserPromptSubmit'), main('UiWorking')]);
+  assert.equal(s.reason, 'prompt');
+});
+
 test('idle_prompt is the safety net: it forces attention when no background work runs', () => {
   assert.equal(run([main('UserPromptSubmit'), main('Notification', { notification_type: 'idle_prompt' })]).state, ATTENTION);
 });

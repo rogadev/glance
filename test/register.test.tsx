@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], runs: any[], stdout = '') {
@@ -161,4 +161,31 @@ test('no state line (an older glance.mjs) leaves the band as it was', async ($, 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /Claude is working/ })).toBeUndefined()
   await ui.unmount()
+})
+
+test('the band reports the engine starting and stopping work, once per change', async ($, on) => {
+  const runs: any[] = []
+  engineBand(on)
+  engine(on, runs, ATTENTION)
+  const clock = mock.clock(on)
+  const sent = () => runs.map(stdinOf).map((s) => s.hook_event_name).filter((n) => n.startsWith('Ui'))
+  const draw = async (isWorking: boolean, settle: number) => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking } })
+    await clock.advance(settle)
+    await ui.unmount()
+  }
+
+  await draw(false, 10)
+  const before = sent().length
+  // Working long enough counts; the stop after it is sent at once.
+  await draw(true, 1700)
+  await draw(false, 10)
+  expect(sent().slice(before)).toEqual(['UiWorking', 'UiIdle'])
+  // The same value again sends nothing.
+  await draw(false, 10)
+  expect(sent().length).toBe(before + 2)
+  // A flip shorter than the settle time (as /exit makes) sends only the stop.
+  await draw(true, 100)
+  await draw(false, 1700)
+  expect(sent().slice(before + 2)).toEqual(['UiIdle'])
 })

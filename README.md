@@ -78,6 +78,8 @@ There's also a long-lived **title watcher** (`paint.exe --watch`), **off** by de
 | `Notification` | Needs you for `permission_prompt`, `idle_prompt`, `elicitation_*dialog`, `agent_needs_input`; `idle_prompt` with live background work stays working |
 | `SubagentStart` / `SubagentStop` | Add / remove the agent; no color change |
 | `Stop` (main thread) | Needs you, unless background work is still live (`background-running`) |
+| `UiWorking` (from the mod) | The engine's `isWorking` turned true and stayed true for 1.5 s. Working (`ui-working`), but only when the pane is on needs-you because something finished (a stop, an Esc, a session start); never over a question, a permission prompt, or a dialog. This is what tints bash mode (`! command`), which sends no hook |
+| `UiIdle` (from the mod) | The engine's `isWorking` turned false. After 2.5 s with no hook since: needs you (`ui-idle`) if working and no background work runs; otherwise nothing. This catches a `/compact` cancelled with Esc, which sends no `PostCompact` |
 | `TitleIdle` (from the watcher) | Needs you (`title-idle`) if working, no background work, and the title has been idle 2.5 s since the last hook; otherwise nothing. It never turns a pane to working. |
 | `StopFailure` | Needs you |
 | `TurnAborted` (from the mod) | Needs you (`aborted`), unless background work is still live |
@@ -119,7 +121,8 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - The mod catches `AskUserQuestion`, confirmed live by the user (19:30Z): `tool.call` sent it as `PreToolUse` (`attention [asking]`), then `classic.PermissionRequest` and a `permission_prompt` notification kept the pane on needs-you until the answer's `PostToolUse` switched it back to working.
 - Removing the settings hooks cuts glance off from sessions that are already open, and the mod doesn't load into them (see above). Each such pane froze on whatever it showed last: one stayed working while it asked a question. Restart open sessions after switching from settings hooks to the mod.
 
-- `/compact` runs no turn: it sends no `UserPromptSubmit` and no tool events, so before glance handled `PreCompact` the pane showed needs-you for the whole compaction (19:37 to 19:39Z, user's screenshot). The log showed `SessionStart` with `source: compact` and a `SubagentStop` for the summarizer at the end. Not yet seen live: a mod's `classic.PreCompact` and `classic.PostCompact` (the mod change needs a new session).
+- `/compact` runs no turn: it sends no `UserPromptSubmit` and no tool events, so before glance handled `PreCompact` the pane showed needs-you for the whole compaction (19:37 to 19:39Z, user's screenshot). The log showed `SessionStart` with `source: compact` and a `SubagentStop` for the summarizer at the end.
+- Live harness (`test/live/run.mjs`, 19:56 to 20:11Z): the mod receives `classic.PreCompact`. Esc during a `/compact` sends nothing at all: no `PostCompact`, no `TurnAborted`, and no `idle_prompt` within two minutes, so the pane stayed working while the window sat idle. In one run a `PostCompact` came 2.5 minutes after the Esc. The engine's `isWorking` (on the `AbovePrompt` band's props) does go false at the Esc, hence `UiIdle`. Bash mode (`! sleep 20`) sends no `UserPromptSubmit` or tool event either, only a `Stop` when the command ends, but `isWorking` is true while it runs, hence `UiWorking`. Esc during a normal turn sends `TurnAborted`, as before. `/exit` also sets `isWorking` for a moment, hence the 1.5 s wait before `UiWorking` counts.
 
 ## Open questions
 
@@ -127,8 +130,6 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - The cron offset is taken once, when the job is created, so a recurring cron that crosses a daylight-saving change is off by an hour until it's recreated (jobs expire after 7 days anyway).
 - A background dev server left running holds the tint for up to an hour after the turn ends (the shell TTL), unless you run `/glance-fix`.
 - After you approve a permission prompt, the pane stays on needs-you until that tool finishes, so a long approved command looks idle. No event marks the approval: `tool.check` runs before the prompt, and `ui.press` and `ui.select` only cover components a plugin draws.
-- A `/compact` cancelled with Esc, or one that fails, may send no `PostCompact`, leaving the pane working. The `idle_prompt` notification (about a minute) should clear it; not yet seen live.
-- Bash mode (`! command`) may run with no hook at all, as `/compact` did, so a long command would show needs-you. Not yet tested.
 - Agent teams are untested: whether teammates send `SubagentStart`, and what `TeammateIdle` should mean for the lead's pane. `TaskCreated` and `TaskCompleted` are task-list events, not busy signals, so glance ignores them. `PermissionDenied` (a rule or auto mode refusing a tool) needs nothing: Claude keeps working.
 - The title watcher depends on Claude Code's title glyphs. If a release changes them, `TitleIdle` stops firing. The log shows whether `TitleIdle` lines still appear.
 
@@ -138,14 +139,29 @@ Work happens on `dev`. `main` only takes pull requests from `dev` (a CI check en
 
 1. Commit to `dev`, or branch from it. Write commit messages as conventional commits: `feat:` for new behavior (minor version), `fix:` for a bug fix (patch), and `docs:`, `test:`, `ci:`, or `chore:` for the rest (no release on their own). Mark a breaking change with `!`, for example `feat!:`.
 2. Before you push, run what CI runs:
-   - `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs`
+   - `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs`
    - `claude plugin validate .` and `claude plugin test .`
    - On Windows, `pwsh -File build.ps1 -Check`. After editing `paint.cs`, run `pwsh -File build.ps1` and commit the new `paint.exe`.
    - The mod's type-check, `npx -p typescript tsc -p .`, needs the types the engine writes to `.claude-plugin/types/` when it loads the mod, so it runs locally, not in CI.
 3. Open a pull request from `dev` to `main` and merge it with a merge commit. Squashing would make `dev` and `main` drift apart.
 4. Release Please opens or updates a release pull request on `main`. Merge it when you want to ship: that tags `vX.Y.Z`, publishes the GitHub release, and merges the release commit back into `dev`.
 
-CI (`.github/workflows/ci.yml`) runs the Node tests on Windows, macOS, and Linux with Node 20 and 22; validates and tests the plugin; rebuilds `paint.exe` from `paint.cs` and checks that the committed `paint.exe` was built from that source (`paint.exe --source-hash`); checks `paint.exe`'s exit codes; and reports one `ci ok` check, which the branch rules require.
+CI (`.github/workflows/ci.yml`) runs the Node tests on Windows, macOS, and Linux with Node 20 and 22, including `test/terminal.test.mjs`, which paints for real: into a pseudo-terminal on macOS and Linux (checking the exact bytes the terminal receives, through both `/dev/tty` and the ancestor fallback) and into a hidden console of its own on Windows; validates and tests the plugin; rebuilds `paint.exe` from `paint.cs` and checks that the committed `paint.exe` was built from that source (`paint.exe --source-hash`); checks `paint.exe`'s exit codes; and reports one `ci ok` check, which the branch rules require.
+
+### Testing
+
+Each layer has its own test, from the rules out to the screen:
+
+| Layer | What it catches | Where | Runs in |
+|---|---|---|---|
+| Rules | The wrong state for a sequence of events | `test/glance.test.mjs`, `test/schedule.test.mjs` | CI, every system |
+| Script end to end | State file, log, and `/glance-fix` output | `test/smoke.test.mjs` | CI, every system |
+| Painters | The color code not reaching a terminal | `test/terminal.test.mjs` | CI, every system |
+| Mod | An event not forwarded, the Desktop band, `isWorking` reporting | `test/register.test.tsx` (`claude plugin test .`) | CI |
+| What Claude Code sends | Keys and commands whose events nobody knows yet | `test/live/run.mjs` | Locally, on Windows |
+| What a terminal shows | A terminal that ignores the color code | You, looking at the pane | By hand |
+
+`node test/live/run.mjs` runs a real, interactive Claude Code session for each scenario in a minimized window, types into it without taking focus (`test/live/console.cs`, built on the fly with the `csc.exe` that ships with Windows), and checks the lines glance logged for that session. It signs in as you and spends a few cents of tokens per scenario, so CI doesn't run it. Add a scenario when you want to know what Claude Code does for some key or command, and record what you learn under "Things verified by experiment".
 
 ### Developing locally
 
