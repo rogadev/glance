@@ -1,0 +1,61 @@
+name: Release
+
+# Runs when a change reaches main. Release Please reads the conventional
+# commits (feat:, fix:, and so on) since the last release and keeps a release
+# pull request open with the version bump and CHANGELOG.md. Merging that pull
+# request tags the version and publishes the GitHub release.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+
+      # GitHub runs no workflows for a pull request the built-in token opened
+      # or updated, so the release pull request would wait forever on the
+      # required check. A dispatched run does start, and its checks land on the
+      # pull request's head commit.
+      - name: Run CI on the release pull request
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+
+  sync-dev:
+    # The release commit (version bump, CHANGELOG.md) lands on main only.
+    # Bring it back to dev so the next dev-to-main pull request starts level.
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - name: Merge main into dev
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-edit origin/main
+          git push origin dev

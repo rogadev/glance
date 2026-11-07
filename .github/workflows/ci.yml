@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  # release.yml dispatches this on Release Please's branch: GitHub runs no
+  # workflows for a pull request that the built-in token opened.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-branch:
+    name: source branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only dev, or a Release Please branch, merges into main
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" != pull_request ] || [ "$BASE" != main ]; then
+            echo "Not a pull request into main; nothing to check."
+            exit 0
+          fi
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::Pull requests into main must come from this repository's dev branch (this one is from $HEAD_REPO)."
+            exit 1
+          fi
+          case "$HEAD" in
+            dev|release-please--*) echo "OK: $HEAD into main." ;;
+            *) echo "::error::Pull requests into main must come from dev (this one is from $HEAD). Open it against dev instead."; exit 1 ;;
+          esac
+
+  node:
+    name: node tests (${{ matrix.os }}, Node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax check
+        run: node --check glance.mjs && node --check schedule.mjs
+      - name: Unit and smoke tests
+        run: node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs
+
+  plugin:
+    name: plugin validate and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Claude Code
+        # The version the mod was last verified against; bump it on purpose.
+        run: npm install --global @anthropic-ai/claude-code@2.1.319
+      - name: Validate the plugin and its marketplace file
+        run: claude plugin validate .
+      - name: Mod tests
+        run: claude plugin test .
+
+  paint:
+    name: paint.exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: paint.cs compiles, and the committed paint.exe was built from it
+        shell: pwsh
+        run: ./build.ps1 -Check
+      - name: Exit codes
+        shell: pwsh
+        run: |
+          function Expect($code, [string[]]$argv) {
+            & ./paint.exe @argv | Out-Null
+            if ($LASTEXITCODE -ne $code) { throw "paint.exe $argv exited $LASTEXITCODE, expected $code" }
+            Write-Host "paint.exe $argv -> $code"
+          }
+          Expect 2 @('--bogus')
+          Expect 3 @('111')        # no claude.exe ancestor on a CI runner
+          Expect 0 @('--utc-offset')
+
+  ci-ok:
+    # The one check the branch rules require, so adding a job here doesn't
+    # mean editing the rules.
+    name: ci ok
+    if: always()
+    needs: [source-branch, node, plugin, paint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || { echo "::error::A required job did not pass."; exit 1; }; done

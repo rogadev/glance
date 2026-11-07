@@ -1,0 +1,5 @@
+# Keep LF everywhere, including Windows CI checkouts: paint.exe embeds the
+# SHA-256 of paint.cs with LF endings, and build.ps1 -Check compares it.
+* text=auto eol=lf
+*.exe binary
+*.png binary
