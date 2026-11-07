@@ -164,7 +164,14 @@ Work happens on `dev`. `main` only takes pull requests from `dev` (a CI check en
    - On Windows, `pwsh -File build.ps1 -Check`. After editing `paint.cs`, run `pwsh -File build.ps1` and commit the new `paint.exe`.
    - The mod's type-check, `npx -p typescript tsc -p .`, needs the types the engine writes to `.claude-plugin/types/` when it loads the mod, so it runs locally, not in CI.
 3. Open a pull request from `dev` to `main` and merge it with a merge commit. Squashing would make `dev` and `main` drift apart.
-4. Release Please opens or updates a release pull request on `main`. Because the built-in token opens it, GitHub holds its CI run for approval: on the pull request, click **Approve and run** (or `gh api -X POST repos/rogadev/glance/actions/runs/<run id>/approve`), and wait for `ci ok`. Merge it when you want to ship: that tags `vX.Y.Z`, publishes the GitHub release, and merges the release commit back into `dev`.
+4. Release Please opens or updates a release pull request on `main`, and CI runs on it. Wait for `ci ok`, then merge it when you want to ship: that tags `vX.Y.Z`, publishes the GitHub release, and merges the release commit back into `dev`.
+
+Release Please acts as a GitHub App, so CI runs on its pull request without approval. GitHub holds CI on a pull request the workflow's built-in token opens until a maintainer approves it. To set the app up (once, in a fork or a new copy of the repo):
+
+1. Create a GitHub App (**Settings**, **Developer settings**, **GitHub Apps**, **New GitHub App**) with no webhook, and the repository permissions **Contents: Read and write** and **Pull requests: Read and write**. Install it on the repository.
+2. In the repository's **Settings**, **Secrets and variables**, **Actions**: add the app's client ID as the variable `RELEASE_APP_CLIENT_ID`, and a private key you generate for it as the secret `RELEASE_APP_PRIVATE_KEY`.
+
+Without the variable, the release workflow falls back to the built-in token. CI on the release pull request then waits for approval: click **Approve and run** on the pull request (or `gh api -X POST repos/rogadev/glance/actions/runs/<run id>/approve`).
 
 CI (`.github/workflows/ci.yml`) runs the Node tests on Windows, macOS, and Linux with Node 20 and 22, including `test/terminal.test.mjs`, which paints for real: into a pseudo-terminal on macOS and Linux (checking the exact bytes the terminal receives, through both `/dev/tty` and the ancestor fallback) and into a hidden console of its own on Windows; validates and tests the plugin; rebuilds `paint.exe` from `paint.cs` and checks that the committed `paint.exe` was built from that source (`paint.exe --source-hash`); checks `paint.exe`'s exit codes; and reports one `ci ok` check, which the branch rules require.
 
