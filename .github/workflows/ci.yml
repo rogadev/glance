@@ -57,8 +57,10 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Syntax check
         run: node --check glance.mjs && node --check schedule.mjs
-      - name: Unit and smoke tests
-        run: node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs
+      - name: Unit, smoke, and terminal tests
+        # terminal.test.mjs paints for real: into a pseudo-terminal on macOS and
+        # Linux, and into a hidden console of its own on Windows.
+        run: node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs
 
   plugin:
     name: plugin validate and test

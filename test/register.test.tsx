@@ -45,6 +45,19 @@ test('settings-hook events reach glance.mjs whole, before the hooks beneath', as
   expect(sent.glance_via).toBe('mod')
 })
 
+test('/compact reaches glance.mjs: it runs no turn, so these two events are all glance hears', async ($, on) => {
+  const runs: any[] = []
+  engine(on, runs)
+  on('classic.PreCompact', () => ({}))
+  on('classic.PostCompact', () => ({}))
+  await $.classic.PreCompact({ trigger: 'manual', custom_instructions: null })
+  await $.classic.PostCompact({ trigger: 'manual', compact_summary: 'summary' })
+  expect(runs.map(stdinOf).map((s) => [s.hook_event_name, s.trigger])).toEqual([
+    ['PreCompact', 'manual'],
+    ['PostCompact', 'manual'],
+  ])
+})
+
 test('a tool call reaches glance.mjs as PreToolUse, with the subagent id when there is one', async ($, on) => {
   const runs: any[] = []
   engine(on, runs)
