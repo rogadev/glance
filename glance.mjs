@@ -35,6 +35,7 @@ export const CONFIG = {
 export const WORKING = 'working';
 export const ATTENTION = 'attention';
 export const BACKGROUND_RUNNING = 'background-running';
+const COMPACT_MANUAL = 'compact-manual';
 
 // Tools whose whole purpose is to wait for an answer from you.
 const ASKING_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
@@ -137,12 +138,29 @@ export function decide(prev, input, now) {
   const next = (state, reason) => ({ state, reason, background });
   const same = () => next(prev.state, prev.reason);
   const busy = () => holdsTint(background, now);
+  // A manual /compact ends waiting on you. An automatic one runs inside a
+  // turn, which goes on and ends with its own Stop. PostCompact and the
+  // SessionStart (compact) after it both land here; the first one clears it.
+  const compactDone = () => {
+    if (prev.reason !== COMPACT_MANUAL) return same();
+    return busy() ? next(WORKING, BACKGROUND_RUNNING) : next(ATTENTION, 'compact-done');
+  };
 
   switch (event) {
     case 'SessionStart':
       // A new or resumed process has no background work from before.
-      if (input.source === 'compact') return same();
+      // Compaction keeps the process and its background work.
+      if (input.source === 'compact') return compactDone();
       return { state: ATTENTION, reason: 'session-start', background: {} };
+
+    case 'PreCompact':
+      // /compact runs no turn (no UserPromptSubmit, no tools), so without this
+      // the pane shows needs-you for the minute or two compaction takes.
+      if (!fromMain) return same();
+      return next(WORKING, input.trigger === 'manual' ? COMPACT_MANUAL : 'compact');
+
+    case 'PostCompact':
+      return compactDone();
 
     case 'SessionEnd':
       return null;
@@ -248,15 +266,84 @@ const PAINT_EXE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'paint
 const PAINT_ERRORS = { 2: 'bad-args', 3: 'no-claude-ancestor', 4: 'attach-failed', 5: 'open-failed', 6: 'write-failed' };
 
 /**
- * Paints the pane. Claude Code starts hooks with their own hidden console, so
- * writing to this process's console reaches nothing; paint.exe attaches to the
- * claude.exe ancestor's console (the visible pane) instead. See paint.cs.
+ * Paints the pane: paint.exe on Windows, the pane's terminal device on macOS
+ * and Linux. Returns 'ok' or a reason for the log.
  */
 function paint(body) {
   // Tests set GLANCE_NO_PAINT so they never repaint the pane they run in.
   if (process.env.GLANCE_NO_PAINT) return 'paint-skipped:disabled';
-  // paint.exe is Windows-only for now; other platforms log this and carry on.
-  if (process.platform !== 'win32') return `paint-skipped:${process.platform}`;
+  if (process.platform === 'win32') return paintConsole(body);
+  if (process.platform === 'darwin' || process.platform === 'linux') return paintTty(body);
+  return `paint-skipped:${process.platform}`;
+}
+
+/**
+ * Finds the terminal device of the nearest ancestor of `pid` that has one, from
+ * `ps -A -o pid=,ppid=,tty=` output. Claude Code holds the pane's terminal even
+ * when a hook it starts has none of its own. Pure, for the tests.
+ *
+ * @param {string} psOutput Lines of "pid ppid tty"; tty is '??' or '?' for none.
+ * @param {number} pid The process to start from (its own tty is not checked).
+ * @returns {string | null} For example '/dev/ttys003' or '/dev/pts/2'.
+ */
+export function ancestorTtyFrom(psOutput, pid) {
+  const procs = new Map();
+  for (const line of String(psOutput).split('\n')) {
+    const [p, pp, tty] = line.trim().split(/\s+/);
+    if (p && pp) procs.set(Number(p), { ppid: Number(pp), tty });
+  }
+  const seen = new Set([pid]);
+  let cur = procs.get(pid)?.ppid;
+  for (let depth = 0; cur && !seen.has(cur) && depth < 16; depth++) {
+    seen.add(cur);
+    const proc = procs.get(cur);
+    if (!proc) return null;
+    if (proc.tty && !/^\?+$/.test(proc.tty) && proc.tty !== '-') return `/dev/${proc.tty}`;
+    cur = proc.ppid;
+  }
+  return null;
+}
+
+/**
+ * macOS and Linux: writes ESC ] <body> BEL to the pane's terminal device. A
+ * hook that shares Claude's controlling terminal reaches it as /dev/tty;
+ * otherwise the nearest ancestor with a terminal (Claude) names the device.
+ */
+function paintTty(body) {
+  const seq = `\x1b]${body}\x07`;
+  const write = (dev) => {
+    const fd = fs.openSync(dev, 'w');
+    try {
+      fs.writeSync(fd, seq);
+    } finally {
+      fs.closeSync(fd);
+    }
+  };
+  let first;
+  try {
+    write('/dev/tty');
+    return 'ok';
+  } catch (err) {
+    first = err.code || err.message;
+  }
+  // Only runs ps (about 20 ms) when the hook has no terminal of its own.
+  const ps = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,tty='], { encoding: 'utf8', timeout: 2000 });
+  const dev = ps.status === 0 ? ancestorTtyFrom(ps.stdout, process.pid) : null;
+  if (!dev) return `paint-failed:tty-${first},no-ancestor-tty`;
+  try {
+    write(dev);
+    return 'ok';
+  } catch (err) {
+    return `paint-failed:tty-${first},${dev}-${err.code || err.message}`;
+  }
+}
+
+/**
+ * Windows. Claude Code starts hooks with their own hidden console, so writing
+ * to this process's console reaches nothing; paint.exe attaches to the
+ * claude.exe ancestor's console (the visible pane) instead. See paint.cs.
+ */
+function paintConsole(body) {
   // The watcher runs glance.mjs outside Claude's process tree, so it passes the pid.
   const args = process.env.GLANCE_CLAUDE_PID ? [body, process.env.GLANCE_CLAUDE_PID] : [body];
   const r = spawnSync(PAINT_EXE, args, { stdio: 'ignore', timeout: 2000, windowsHide: true });
@@ -416,6 +503,12 @@ function apply(input, stateFile) {
   } else {
     fs.rmSync(stateFile, { force: true });
     fs.rmSync(stateFile.replace(/\.json$/, '.watch'), { force: true });
+  }
+
+  // The mod reads this to draw the desktop band (hooks/register.tsx). Settings
+  // hooks and the watcher don't send glance_via, and their stdout stays empty.
+  if (input.glance_via === 'mod') {
+    process.stdout.write(JSON.stringify({ state: next ? next.state : ATTENTION, color: CONFIG.workingColor }) + '\n');
   }
 
   if (input.hook_event_name === 'GlanceReset') {

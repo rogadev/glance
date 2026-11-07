@@ -82,3 +82,31 @@ test('unparsable input is logged, not dropped silently', (t) => {
   assert.equal(r.status, 0);
   assert.match(lastLog(state), /input-unparsable/);
 });
+
+test('events from the mod get a state line first, for the desktop band', (t) => {
+  const { dir } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const r = hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: 'smoke-3', prompt: 'hi', glance_via: 'mod' });
+  assert.deepEqual(JSON.parse(r.stdout.split('\n')[0]), { state: 'working', color: '#1F2D3D' });
+  const reset = hook(dir, { hook_event_name: 'GlanceReset', session_id: 'smoke-3', live_agents: [], glance_via: 'mod' });
+  const [state, summary] = reset.stdout.trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(state.state, 'attention');
+  assert.equal(summary.was, 'working [prompt]');
+});
+
+// A CI runner has no terminal, so this proves the macOS and Linux painter fails
+// cleanly (logged, exit 0) rather than that it paints. On Windows it would
+// paint the pane running the tests, so it's skipped there.
+test('without a terminal, the macOS and Linux painter logs why and carries on', { skip: process.platform === 'win32' }, (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const r = spawnSync(process.execPath, [GLANCE], {
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'smoke-4' }),
+    encoding: 'utf8',
+    env: { ...process.env, HOME: dir, USERPROFILE: dir },
+    stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true, // no controlling terminal, as under a CI runner
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(lastLog(state), /Stop -> attention \[stop\] bg=0 (ok|paint-failed:tty-\S+)$/);
+});

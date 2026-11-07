@@ -1,11 +1,33 @@
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
+import type { Pane } from '../types'
+
 // The glance mod. It hands each event glance.mjs decides on to that script,
-// which keeps the per-session state and paints the pane: the settings-hook
-// events (as `classic.*`, so an install needs no settings.json entries),
-// PreToolUse (through `tool.call`, which carries a subagent's `agentId`),
-// Esc (`turn.complete` aborted, which fires no settings hook), and
-// /glance-fix.
+// which keeps the per-session state and paints the terminal pane: the
+// settings-hook events (as `classic.*`, so an install needs no settings.json
+// entries), PreToolUse (through `tool.call`, which carries a subagent's
+// `agentId`), Esc (`turn.complete` aborted, which fires no settings hook), and
+// /glance-fix. The desktop app has no terminal to tint, so there the mod draws
+// a band above the prompt from the state glance.mjs reports back.
+
+/** This session's pane as glance.mjs last reported it. Change `shape` when Pane changes. */
+const pane = atom({ plugin: 'glance', key: 'pane' } as const, { state: 'attention', color: '#1F2D3D' } as Pane, {
+  shape: 'pane-1',
+})
+
+/** The state line glance.mjs prints first for every event the mod sends, or null. */
+export function parsePane(stdout: string): Pane | null {
+  try {
+    const r = JSON.parse(stdout.split('\n')[0] || '')
+    if ((r.state === 'working' || r.state === 'attention') && typeof r.color === 'string') {
+      return { state: r.state, color: r.color }
+    }
+  } catch {
+    // Older glance.mjs, or no output: the band keeps its last state.
+  }
+  return null
+}
 
 const FIX = 'glance-fix'
 const LIVE: ReadonlySet<string> = new Set(['pending', 'running', 'waiting'])
@@ -39,12 +61,15 @@ async function glance($: EngineInterface, input: object) {
       timeoutMs: 5000,
     })
     if (r.exitCode !== 0) $.ui.log(`glance: exit ${r.exitCode}: ${r.stderr.slice(0, 200)}`, { to: 'debug' })
+    const next = parsePane(r.stdout)
+    if (next) await update($, pane, () => next)
+    else $.ui.log(`glance: no state line from glance.mjs: ${r.stdout.slice(0, 200)}`, { to: 'debug' })
     return r
   } catch (err: unknown) {
     $.ui.log(`glance: could not run glance.mjs: ${String(err)}`, { to: 'debug' })
     if (!warned) {
       warned = true
-      $.ui.toast('glance could not start Node.js, so the pane tint is off. Install Node.js 18 or later and restart Claude.')
+      $.ui.toast('glance could not start Node.js, so the pane tint is off. Install Node.js 20 or later and restart Claude.')
     }
     return undefined
   }
@@ -72,6 +97,8 @@ export const register: Register = (on) => {
   on('classic.SubagentStop', async ($, e, next) => (await glance($, e), next(e))).catch(failOpen)
   on('classic.Stop', async ($, e, next) => (await glance($, e), next(e))).catch(failOpen)
   on('classic.StopFailure', async ($, e, next) => (await glance($, e), next(e))).catch(failOpen)
+  on('classic.PreCompact', async ($, e, next) => (await glance($, e), next(e))).catch(failOpen)
+  on('classic.PostCompact', async ($, e, next) => (await glance($, e), next(e))).catch(failOpen)
 
   on('tool.call', async ($, e, next) => {
     const session_id = await $.session.id()
@@ -103,6 +130,25 @@ export const register: Register = (on) => {
     if (r.exitCode !== 0) return { text: `glance-fix: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     return { text: describe(r.stdout) }
   }).catch((_$, _e, next) => ({ text: `glance-fix failed: ${String(next.error)}` }))
+
+  /**
+   * The desktop app's stand-in for the terminal tint: a full-width band in the
+   * working color above the prompt while glance says working, and nothing
+   * otherwise (needs you). The terminal is tinted by glance.mjs, so it passes.
+   */
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    const now = await read($, pane)
+    if (now.state !== 'working') return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    return (
+      <Box width="100%" paddingX={1} backgroundColor={now.color}>
+        <Text color="#FFFFFF">
+          Claude is working
+        </Text>
+      </Box>
+    )
+  }).catch(failOpen)
 
   /**
    * Pressing Esc ends a turn without firing any settings hook (no Stop). The

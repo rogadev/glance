@@ -9,7 +9,10 @@ The rule is lopsided on purpose. A pane that looks busy when it's really waiting
 
 ## Requirements
 
-- **Windows** with **Windows Terminal**. Mac support and a Claude Desktop indicator are planned; see the issues.
+- One of:
+  - **Windows** with **Windows Terminal** (verified).
+  - **macOS or Linux** in a terminal that supports `OSC 11` and `OSC 111`, such as iTerm2, Ghostty, kitty, WezTerm, or GNOME Terminal. Built and tested in CI, but **not yet confirmed on a real Mac**; if the tint doesn't change or doesn't clear, open an issue with the end of `~/.claude/state/glance/events.log`. macOS Terminal.app may not support `OSC 111`, so its tint may not clear.
+  - **The Claude desktop app** (its local Code sessions): no terminal to tint, so glance draws a slate "Claude is working" band above the prompt instead. Tested with the mod test kit, **not yet confirmed in the app**.
 - **Node.js 20 or later** on `PATH`. glance's hook script runs on Node.
 - **Claude Code 2.1.319 or later.**
 
@@ -27,7 +30,7 @@ Answer `y` to add the marketplace, then pick a scope (the user scope tints every
 claude plugin install glance --marketplace rogadev/glance
 ```
 
-In the Claude desktop app, where `/plugin` doesn't run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `rogadev/glance`, then **Add plugin**. The desktop app runs the mod and `/glance-fix` in its local Code sessions, but it has no terminal pane to tint yet.
+In the Claude desktop app, where `/plugin` doesn't run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `rogadev/glance`, then **Add plugin**. There, glance shows its band above the prompt while Claude works, and `/glance-fix` works the same way.
 
 Sessions you start after the install are tinted.
 
@@ -43,7 +46,7 @@ It runs even while a turn is in progress, and it changes nothing in your convers
 
 ## How it works
 
-The glance mod (`hooks/register.ts`) hands each event glance decides on to `glance.mjs`:
+The glance mod (`hooks/register.tsx`) hands each event glance decides on to `glance.mjs`:
 
 - The settings-hook events, through the mod's `classic.*` hooks, so an install needs no `settings.json` edits.
 - Each tool call, as `PreToolUse`.
@@ -65,7 +68,9 @@ There's also a long-lived **title watcher** (`paint.exe --watch`), **off** by de
 
 | Event | Result |
 |---|---|
-| `SessionStart` | Needs you; forgets subagents (kept on `compact`) |
+| `SessionStart` | Needs you; forgets subagents (kept on `compact`, which also ends a manual `/compact` like `PostCompact`) |
+| `PreCompact` (main thread) | Working (`compact-manual` for `/compact`, `compact` for an automatic one) |
+| `PostCompact` | After `/compact`: needs you (`compact-done`), unless background work is still live. After an automatic compact: nothing, since the turn goes on and ends with its own `Stop` |
 | `UserPromptSubmit` | Working; clears background work named in any `<task-notification>` in the prompt; a prompt that matches a scheduled run's prompt means it fired (a recurring cron moves to its next run, anything else ends) |
 | `PreToolUse` (main thread) | Working, except `AskUserQuestion` and `ExitPlanMode`, which mean needs you |
 | `PostToolUse`, `PostToolUseFailure`, `ElicitationResult` | Working (main thread, or a subagent clearing its own permission prompt); a `tool_response.backgroundTaskId` adds a background shell; `ScheduleWakeup` and `CronCreate` add a scheduled run, and `ScheduleWakeup` with `stop` or `CronDelete` removes it |
@@ -113,6 +118,8 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - Two plugins with the same name don't both load: the second reports "another plugin of that name loads first".
 - The mod catches `AskUserQuestion`, confirmed live by the user (19:30Z): `tool.call` sent it as `PreToolUse` (`attention [asking]`), then `classic.PermissionRequest` and a `permission_prompt` notification kept the pane on needs-you until the answer's `PostToolUse` switched it back to working.
 - Removing the settings hooks cuts glance off from sessions that are already open, and the mod doesn't load into them (see above). Each such pane froze on whatever it showed last: one stayed working while it asked a question. Restart open sessions after switching from settings hooks to the mod.
+
+- `/compact` runs no turn: it sends no `UserPromptSubmit` and no tool events, so before glance handled `PreCompact` the pane showed needs-you for the whole compaction (19:37 to 19:39Z, user's screenshot). The log showed `SessionStart` with `source: compact` and a `SubagentStop` for the summarizer at the end. Not yet seen live: a mod's `classic.PreCompact` and `classic.PostCompact` (the mod change needs a new session).
 
 ## Open questions
 

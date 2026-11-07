@@ -1,6 +1,10 @@
 {
   "name": "glance",
-  "owner": { "name": "Ryan Roga", "url": "https://github.com/rogadev" },
+  "description": "glance: a Claude Code mod that shows from across the room which sessions need you.",
+  "owner": {
+    "name": "Ryan Roga",
+    "url": "https://github.com/rogadev"
+  },
   "plugins": [
     {
       "name": "glance",

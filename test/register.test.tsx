@@ -80,3 +80,72 @@ test('/glance-fix sends GlanceReset with only the running agents and reports the
   expect(r.text).toContain('Dropped: shell b1.')
   expect(r.text).toContain('Kept (still running): agent a1.')
 })
+
+const WORKING = JSON.stringify({ state: 'working', color: '#1F2D3D' }) + '\n'
+const ATTENTION = JSON.stringify({ state: 'attention', color: '#1F2D3D' }) + '\n'
+
+// The engine's own drawing of the band, beneath the plugin: an empty line.
+function engineBand(on: Parameters<Parameters<typeof test>[1]>[1]) {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  on('ui.log', () => ({ value: undefined }))
+}
+
+const BAND = {
+  plugin: 'glance',
+  component: 'AbovePrompt',
+  props: {
+    hasSurvey: false,
+    isWorking: true,
+    maxRows: 10,
+    bodyColumns: 80,
+    scroll: { offset: 0, bodyRows: 10 },
+    view: {},
+  },
+} as const
+
+test('the desktop shows a working band while glance says working, and nothing once it needs you', async ($, on) => {
+  let stdout = WORKING
+  engineBand(on)
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout, stderr: '' } }))
+  on('classic.UserPromptSubmit', () => ({}))
+  on('classic.Stop', () => ({}))
+
+  await $.classic.UserPromptSubmit({ session_id: 'sess-1', prompt: 'hi' })
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /Claude is working/ }))?.text).toBe('Claude is working')
+  await ui.unmount()
+
+  stdout = ATTENTION
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /Claude is working/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the terminal gets no band: glance.mjs tints the pane there', async ($, on) => {
+  engineBand(on)
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: WORKING, stderr: '' } }))
+  on('classic.UserPromptSubmit', () => ({}))
+
+  await $.classic.UserPromptSubmit({ session_id: 'sess-1', prompt: 'hi' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Claude is working/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('no state line (an older glance.mjs) leaves the band as it was', async ($, on) => {
+  engineBand(on)
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
+  on('classic.UserPromptSubmit', () => ({}))
+
+  await $.classic.UserPromptSubmit({ session_id: 'sess-1', prompt: 'hi' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /Claude is working/ })).toBeUndefined()
+  await ui.unmount()
+})

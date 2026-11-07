@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decide, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
+import { ancestorTtyFrom, decide, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
 
 const T = 1_000_000;
 
@@ -31,6 +31,39 @@ const notice = (id, status = 'killed') =>
 // A Bash call with run_in_background, as PostToolUse reports it.
 const bgShell = (id) =>
   main('PostToolUse', { tool_name: 'Bash', tool_input: { run_in_background: true }, tool_response: { backgroundTaskId: id } });
+
+test('a manual /compact is working, then needs you when PostCompact arrives', () => {
+  const during = run([main('Stop'), main('PreCompact', { trigger: 'manual' })]);
+  assert.equal(during.state, WORKING);
+  assert.equal(run([main('PostCompact', { trigger: 'manual' })], during).state, ATTENTION);
+});
+
+test('a manual /compact also ends on the SessionStart (compact) that follows it', () => {
+  const during = run([main('PreCompact', { trigger: 'manual' })]);
+  assert.equal(run([main('SessionStart', { source: 'compact' })], during).state, ATTENTION);
+});
+
+test('a manual /compact with a background shell running stays working', () => {
+  const during = run([bgShell('b1'), main('Stop'), main('PreCompact', { trigger: 'manual' })]);
+  const after = run([main('PostCompact', { trigger: 'manual' })], during);
+  assert.equal(after.state, WORKING);
+  assert.deepEqual(ids(after), ['b1']);
+});
+
+test('an automatic compact mid-turn stays working until the turn stops', () => {
+  const s = run([
+    main('UserPromptSubmit'),
+    main('PreCompact', { trigger: 'auto' }),
+    main('PostCompact', { trigger: 'auto' }),
+    main('SessionStart', { source: 'compact' }),
+  ]);
+  assert.equal(s.state, WORKING);
+  assert.equal(run([main('Stop')], s).state, ATTENTION);
+});
+
+test('a subagent compacting does not tint the pane', () => {
+  assert.equal(run([main('Stop'), sub('PreCompact', 'a1', { trigger: 'auto' })]).state, ATTENTION);
+});
 
 test('a normal turn goes working, then attention on Stop', () => {
   assert.equal(run([main('UserPromptSubmit')]).state, WORKING);
@@ -307,4 +340,22 @@ test('SessionEnd ends tracking', () => {
 test('osc gives the working color, and resets to the profile for attention', () => {
   assert.equal(osc(WORKING), `11;${CONFIG.workingColor}`);
   assert.equal(osc(ATTENTION), '111');
+});
+
+// ps -A -o pid=,ppid=,tty= on macOS ('??' for none) and Linux ('?').
+test('ancestorTtyFrom finds the nearest ancestor with a terminal', () => {
+  const mac = ['  1     0 ??', ' 500     1 ttys003', ' 600   500 ttys003', ' 700   600 ??', ' 800   700 ??'].join('\n');
+  assert.equal(ancestorTtyFrom(mac, 800), '/dev/ttys003');
+  const linux = ['1 0 ?', '40 1 pts/2', '41 40 ?', '42 41 ?'].join('\n');
+  assert.equal(ancestorTtyFrom(linux, 42), '/dev/pts/2');
+});
+
+test('ancestorTtyFrom returns null when no ancestor has a terminal, or the pid is unknown', () => {
+  assert.equal(ancestorTtyFrom('1 0 ??\n2 1 ??\n3 2 ??', 3), null);
+  assert.equal(ancestorTtyFrom('1 0 ??', 99), null);
+  assert.equal(ancestorTtyFrom('', 1), null);
+});
+
+test("ancestorTtyFrom ignores the process's own terminal and stops at a loop", () => {
+  assert.equal(ancestorTtyFrom('5 6 ttys009\n6 5 ??', 5), null);
 });
