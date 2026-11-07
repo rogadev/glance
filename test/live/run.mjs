@@ -25,8 +25,9 @@ const CSC = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Each step is [what, ...args]. 'say' types a prompt and presses Enter; 'type'
-// and 'key' type without Enter; 'until' waits for a log line; 'expect' fails
-// the scenario unless a line shows up in time; 'watch' only records.
+// and 'key' type without Enter; 'pause' waits. 'until' and 'expect' both wait
+// for a log line and fail the scenario if none shows up in time: 'until' marks
+// a step the scenario needs to go on, 'expect' the thing it checks.
 const SCENARIOS = {
   'esc-turn': {
     about: 'Esc during a normal turn turns the pane back to needs-you',
@@ -148,7 +149,6 @@ async function runScenario(name, exe) {
       } else if (what === 'type') send(arg);
       else if (what === 'key') send(arg);
       else if (what === 'pause') await sleep(arg);
-      else if (what === 'watch') await sleep(arg);
       else if (what === 'until' || what === 'expect') {
         const ok = await waitFor(arg, ms);
         await clearDialogs();

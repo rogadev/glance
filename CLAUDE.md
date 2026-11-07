@@ -1,6 +1,6 @@
 # glance
 
-A Claude Code mod that tints a Windows Terminal pane while Claude works, so the user can tell from across the room which sessions need them. Read `README.md` first: it has the event table, what has been verified by experiment, the open questions, and the release workflow.
+A Claude Code mod that tints the terminal pane (or, in the desktop app, draws a band above the prompt) while Claude works, so the user can tell from across the room which sessions need them. Read `README.md` first: it has the event table, what has been verified by experiment, the open questions, and the release workflow.
 
 Repo: `rogadev/glance` (public). Work on `dev`; `main` takes pull requests from `dev` only, merged with a merge commit, and Release Please cuts releases from `main`. Use conventional commit messages (`feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`): they decide the next version.
 
@@ -14,14 +14,15 @@ On the maintainer's machine this folder is also the live install: `CLAUDE_CODE_P
 - Never fail silently: log it. A silent `return` on bad input hid a broken watcher for the whole first Esc test.
 - Hooks must stay fast (about 80 ms per run today: 40 for Node, 40 for `paint.exe`) and must never throw where it could matter: catch and log instead. Every mod hook that can hold up an event has `.catch(failOpen)`.
 - A function in `hooks/register.tsx` that receives `$` must be declared at the top level of the file, or the engine refuses to load the module.
-- Painting goes through `paint.exe` (source `paint.cs`, rebuild with `build.ps1`, then commit `paint.exe`; CI's `build.ps1 -Check` fails if the committed binary wasn't built from the committed source). Hooks have their own hidden console, so never write to `CONOUT$` from Node: it either fails or paints nothing, and a bare `CONOUT$` creates a stray file in the session's working directory.
-- A log line ending `ok` means `paint.exe` exited 0. Anything else is `paint-failed:<reason>`, with the exit codes listed in `paint.cs`, or `paint-skipped:<reason>` (not Windows, or `GLANCE_NO_PAINT` set by the tests). Hooks can't see the screen, so confirm visual changes with a screenshot or by asking the user.
+- On macOS and Linux, `glance.mjs` writes OSC 11 and OSC 111 to the pane's terminal device itself. On Windows, painting goes through `paint.exe` (source `paint.cs`, rebuild with `build.ps1`, then commit `paint.exe`; CI's `build.ps1 -Check` fails if the committed binary wasn't built from the committed source). Hooks have their own hidden console, so never write to `CONOUT$` from Node: it either fails or paints nothing, and a bare `CONOUT$` creates a stray file in the session's working directory.
+- A log line ending `ok` means the color code was written: `paint.exe` exited 0 on Windows, or the terminal device took the write on macOS and Linux. Anything else is `paint-failed:<reason>` (on Windows, the exit codes listed in `paint.cs`), or `paint-skipped:<reason>` (a system with no painter, or `GLANCE_NO_PAINT` set by the tests). Hooks can't see the screen, so confirm visual changes with a screenshot or by asking the user.
 
 ## Where things are
 
 - `glance.mjs`: the hook script (pure `decide()` plus I/O). `schedule.mjs`: cron parsing and the rules for `/loop` wakeups and cron jobs.
 - `hooks/register.tsx`: the mod. Forwards the settings-hook events (`classic.*`), tool calls (as `PreToolUse`), Esc (`TurnAborted`), the engine's `isWorking` (`UiWorking`, `UiIdle`), `/glance-check` (`GlanceCheck`), and `/glance-fix` (`GlanceReset`) to `glance.mjs`, and draws the Claude Desktop band.
-- `test/`: `glance.test.mjs` and `schedule.test.mjs` (unit), `smoke.test.mjs` (runs `glance.mjs` end to end in a throwaway home), `terminal.test.mjs` (paints a real pseudo-terminal or console), `register.test.tsx` (the mod, run by `claude plugin test .` only), and `live/` (drives a real interactive session on Windows; local only, spends tokens).
+- `test/`: `glance.test.mjs` and `schedule.test.mjs` (unit), `smoke.test.mjs` (runs `glance.mjs` end to end in a throwaway home), `terminal.test.mjs` (paints a real pseudo-terminal through `pty_run.py`, or a real console), `register.test.tsx` (the mod, run by `claude plugin test .` only), and `live/` (drives a real interactive session on Windows; local only, spends tokens).
+- `types/index.d.ts`: the mod's state shape (`Pane`), registered with the engine through `PluginState`.
 - `paint.cs`: source of `paint.exe`, the console painter and the per-session title watcher (`--watch`). `build.ps1`: rebuilds it with the `csc.exe` that ships with Windows.
 - `.claude-plugin/`: `plugin.json` (Release Please bumps its version) and `marketplace.json` (what `/plugin install glance --marketplace rogadev/glance` reads).
 - `.github/workflows/`: `ci.yml` (tests on three systems, plugin checks, `paint.exe` check, the dev-only-into-main guard, and the `ci ok` check the branch rules require) and `release.yml` (Release Please, then syncing `main` back into `dev`).

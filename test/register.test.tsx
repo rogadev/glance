@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { describeCheck, parsePane } from '../hooks/register'
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], runs: any[], stdout = '') {
@@ -97,7 +98,7 @@ test('/glance-fix sends GlanceReset with only the running agents and reports the
 const WORKING = JSON.stringify({ state: 'working', color: '#1F2D3D' }) + '\n'
 const ATTENTION = JSON.stringify({ state: 'attention', color: '#1F2D3D' }) + '\n'
 
-// The engine's own drawing of the band, beneath the plugin: an empty line.
+// The engine's own drawing of the band, beneath the plugin: one line reading "engine".
 function engineBand(on: Parameters<Parameters<typeof test>[1]>[1]) {
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -214,4 +215,77 @@ test('/glance-check sends GlanceCheck with the surface and explains the report',
   expect(sent).toEqual({ hook_event_name: 'GlanceCheck', session_id: 'sess-1', surface: 'terminal', glance_via: 'mod' })
   expect(r.text).toContain('Did you see the background change')
   expect(r.text).toContain('iTerm2: should work')
+})
+
+test("glance's own commands don't count as Claude working, and the hold ends with the command", async ($, on) => {
+  const runs: any[] = []
+  let release = () => {}
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', (_, e) => {
+    runs.push(e)
+    const report = JSON.stringify({ surface: 'terminal', flash: 'ok', restore: 'ok', state: 'attention [stop]' })
+    const done = { value: { exitCode: 0, stdout: ATTENTION + report + '\n', stderr: '' } }
+    if (stdinOf(e).hook_event_name !== 'GlanceCheck') return done
+    return new Promise((resolve) => (release = () => resolve(done))) as never
+  })
+  on('command.run', () => ({ text: 'engine ran it' }))
+  engineBand(on)
+  const clock = mock.clock(on)
+  const sent = () => runs.map(stdinOf).map((s) => s.hook_event_name).filter((n) => n.startsWith('Ui'))
+  const draw = async (isWorking: boolean, settle: number) => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking } })
+    await clock.advance(settle)
+    await ui.unmount()
+  }
+
+  await draw(false, 10)
+  const before = sent().length
+  const check = $.command.run({ command: 'glance-check' })
+  await draw(true, 1700)
+  expect(sent().slice(before)).toEqual([])
+  release()
+  await check
+  await draw(false, 10)
+  await draw(true, 1700)
+  expect(sent().slice(before)).toEqual(['UiIdle', 'UiWorking'])
+})
+
+test('a glance.mjs that cannot start never holds Claude up, and warns once', async ($, on) => {
+  const stops: unknown[] = []
+  const toasts: unknown[] = []
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => {
+    throw new Error('spawn node ENOENT')
+  })
+  on('ui.toast', (_, e) => (toasts.push(e), { value: undefined }) as never)
+  on('classic.Stop', (_, e) => (stops.push(e), {}))
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  expect(stops.length).toBe(2)
+  expect(toasts.length).toBe(1)
+})
+
+test('/glance-check names the step that failed, and warns when the pane may be left busy', async () => {
+  const base = { surface: 'terminal', painter: 'tty', flash_ms: 1500, state: 'attention [stop]', background: 0 }
+  const say = (r: object) => describeCheck(JSON.stringify({ ...base, ...r }))
+  expect(say({ flash: 'ok', restore: 'ok' })).toContain('for 1.5 seconds')
+  expect(say({ flash: 'ok', restore: 'ok' })).toContain('Now: needs you [stop]')
+  expect(say({ flash: 'paint-failed:tty-ENXIO,no-ancestor-tty', restore: 'paint-failed:x' })).toContain(
+    "couldn't paint this pane (paint-failed:tty-ENXIO,no-ancestor-tty)",
+  )
+  const restoreFailed = say({ flash: 'ok', restore: 'paint-failed:write-failed' })
+  expect(restoreFailed).toContain("couldn't put the pane back (paint-failed:write-failed)")
+  expect(restoreFailed).toContain('/glance-fix')
+  const desktop = say({ surface: 'desktop', flash: 'paint-failed:no-claude-ancestor', restore: 'paint-failed:no-claude-ancestor' })
+  expect(desktop).toContain('In Claude Desktop')
+  expect(desktop).toContain('Terminal: none (Claude Desktop)')
+  expect(desktop).not.toContain('Painter:')
+  expect(describeCheck('not json')).toContain('gave no report')
+})
+
+test('parsePane takes only a well-formed state line', async () => {
+  expect(parsePane('{"state":"working","color":"#1F2D3D"}\n{"was":"x"}')).toEqual({ state: 'working', color: '#1F2D3D' })
+  expect(parsePane('{"state":"busy","color":"#1F2D3D"}')).toBeNull()
+  expect(parsePane('{"state":"working"}')).toBeNull()
+  expect(parsePane('')).toBeNull()
 })

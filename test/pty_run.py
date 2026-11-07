@@ -27,7 +27,7 @@ if pid == 0:
         if child != 0:
             # Stay alive, holding the pty, while the grandchild runs.
             _, status = os.waitpid(child, 0)
-            os._exit(os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else 0)
+            os._exit(os.waitstatus_to_exitcode(status))
         os.setsid()
     stdin = os.open(event, os.O_RDONLY)
     os.dup2(stdin, 0)
@@ -48,4 +48,4 @@ while True:
     out += chunk
 _, status = os.waitpid(pid, 0)
 sys.stdout.write(out.hex())
-sys.exit(os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else 0)
+sys.exit(os.waitstatus_to_exitcode(status))

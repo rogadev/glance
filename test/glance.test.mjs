@@ -424,3 +424,38 @@ test('detectTerminal puts a multiplexer or editor ahead of the window it runs in
   // VS Code's terminal inherits WT_SESSION when VS Code was started from Windows Terminal.
   assert.equal(detectTerminal({ TERM_PROGRAM: 'vscode', WT_SESSION: 'x' }).name, 'VS Code');
 });
+
+test('detectTerminal falls back to what the environment names, then to unknown', () => {
+  assert.deepEqual(detectTerminal({}, 'linux'), { name: 'unknown', support: 'unknown' });
+  assert.deepEqual(detectTerminal({ TERM: 'xterm-256color' }, 'linux'), { name: 'xterm-256color', support: 'unknown' });
+  assert.deepEqual(detectTerminal({ TERM_PROGRAM: 'Hyper' }, 'darwin'), { name: 'Hyper', support: 'unknown' });
+  assert.deepEqual(detectTerminal({}, 'win32'), { name: 'Windows console (conhost)', support: 'unknown' });
+});
+
+test('a manual /compact ends once, though PostCompact and SessionStart (compact) both arrive', () => {
+  const s = run([
+    main('PreCompact', { trigger: 'manual' }),
+    main('PostCompact', { trigger: 'manual' }),
+    main('SessionStart', { source: 'compact' }),
+  ]);
+  assert.equal(s.state, ATTENTION);
+  assert.equal(s.reason, 'compact-done');
+});
+
+test('UiWorking turns working only from a finished state, never from a fresh one', () => {
+  // A mod loaded into a session glance hasn't seen starts from init: no turn to trust.
+  assert.equal(run([main('UiWorking')]).state, ATTENTION);
+  for (const done of [
+    [main('Stop')],
+    [main('UserPromptSubmit'), main('Notification', { notification_type: 'idle_prompt' })],
+    [main('PreCompact', { trigger: 'manual' }), main('PostCompact', { trigger: 'manual' })],
+  ]) {
+    const s = run([...done, main('UiWorking')]);
+    assert.equal(s.state, WORKING, `UiWorking after ${done.map((e) => e.hook_event_name).join(', ')}`);
+  }
+});
+
+test('UiIdle with no idle_since waits out the confirm window from the last hook', () => {
+  const s = run([main('UserPromptSubmit', { at: T })]);
+  assert.equal(run([{ hook_event_name: 'UiIdle', at: T + 500 }], s).state, WORKING);
+});

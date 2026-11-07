@@ -128,3 +128,16 @@ test('GlanceCheck reports what it found and leaves the session state alone', (t)
   assert.equal(fs.readFileSync(file, 'utf8'), before);
   assert.match(lastLog(state), / smoke-5 main GlanceCheck -> working \[prompt\] flash:paint-skipped:disabled /);
 });
+
+test('UiIdle waits out the confirm window itself, then clears a pane no hook has touched since', (t) => {
+  // The mod sends UiIdle the moment isWorking goes false, with idle_since set
+  // to now; only the wait in main() makes it count.
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-6';
+  hook(dir, { hook_event_name: 'PreCompact', session_id: sid, trigger: 'manual' });
+  hook(dir, { hook_event_name: 'UiIdle', session_id: sid, idle_since: Date.now() });
+  const after = JSON.parse(fs.readFileSync(path.join(state, `${sid}.json`), 'utf8'));
+  assert.equal(after.state, 'attention');
+  assert.equal(after.reason, 'ui-idle');
+});

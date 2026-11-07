@@ -7,12 +7,18 @@ import type { Pane } from '../types'
 // which keeps the per-session state and paints the terminal pane: the
 // settings-hook events (as `classic.*`, so an install needs no settings.json
 // entries), PreToolUse (through `tool.call`, which carries a subagent's
-// `agentId`), Esc (`turn.complete` aborted, which fires no settings hook), and
-// /glance-fix. The desktop app has no terminal to tint, so there the mod draws
-// a band above the prompt from the state glance.mjs reports back.
+// `agentId`), Esc (`turn.complete` aborted, which fires no settings hook), the
+// engine's isWorking (UiWorking and UiIdle, for what sends no hook, such as
+// bash mode or a cancelled /compact), /glance-check, and /glance-fix. The
+// desktop app has no terminal to tint, so there the mod draws a band above the
+// prompt from the state glance.mjs reports back.
 
-/** This session's pane as glance.mjs last reported it. Change `shape` when Pane changes. */
-const pane = atom({ plugin: 'glance', key: 'pane' } as const, { state: 'attention', color: '#1F2D3D' } as Pane, {
+/**
+ * This session's pane as glance.mjs last reported it. Change `shape` when Pane
+ * changes. The color stays empty until glance.mjs, which owns it, reports one;
+ * the band draws only after that.
+ */
+const pane = atom({ plugin: 'glance', key: 'pane' } as const, { state: 'attention', color: '' } as Pane, {
   shape: 'pane-1',
 })
 
@@ -35,6 +41,11 @@ const LIVE: ReadonlySet<string> = new Set(['pending', 'running', 'waiting'])
 
 type Summary = { was?: string; dropped?: string[]; kept?: string[]; paint?: string }
 
+/** glance.mjs's "attention [stop]" in the words the commands use: "needs you [stop]". */
+function plainState(state: string | undefined): string {
+  return (state || 'unknown').replace(/^attention\b/, 'needs you')
+}
+
 /** Turns glance.mjs's one-line JSON summary into the command's output. */
 export function describe(stdout: string): string {
   let r: Summary
@@ -43,7 +54,7 @@ export function describe(stdout: string): string {
   } catch {
     return `glance-fix: glance.mjs gave no summary. Output: ${stdout.slice(0, 200) || '(empty)'}`
   }
-  const lines = [`glance was ${r.was}; now needs-you.`]
+  const lines = [`glance was ${plainState(r.was)}; now needs you.`]
   lines.push(r.dropped?.length ? `Dropped: ${r.dropped.join(', ')}.` : 'Nothing stale to drop.')
   if (r.kept?.length) lines.push(`Kept (still running): ${r.kept.join(', ')}.`)
   if (r.paint !== 'ok') lines.push(`Painting failed (${r.paint}); see ~/.claude/state/glance/events.log.`)
@@ -59,6 +70,7 @@ type Check = {
   painter?: string
   flash?: string
   restore?: string
+  flash_ms?: number
   state?: string
   background?: number
 }
@@ -77,21 +89,26 @@ export function describeCheck(stdout: string): string {
   } catch {
     return `glance-check: glance.mjs gave no report. Output: ${stdout.slice(0, 200) || '(empty)'}`
   }
+  const issue = 'Open an issue at https://github.com/rogadev/glance/issues with this report.'
+  const desktop = r.surface === 'desktop'
   const lines: string[] = []
-  if (r.surface === 'desktop') {
+  if (desktop) {
     lines.push('In Claude Desktop, glance draws a band above the prompt while Claude works, instead of tinting a terminal.')
-  } else if (r.flash === 'ok' && r.restore === 'ok') {
-    lines.push('glance showed the working color for 1.5 seconds, then put the pane back. Did you see the background change and change back?')
-    lines.push("If you didn't, your terminal ignores the color codes: open an issue at https://github.com/rogadev/glance/issues with this report.")
+  } else if (r.flash !== 'ok') {
+    lines.push(`glance couldn't paint this pane (${r.flash}). ${issue}`)
+  } else if (r.restore !== 'ok') {
+    lines.push(`glance painted the working color but couldn't put the pane back (${r.restore}), so it may still look busy. Run /glance-fix to repaint it. ${issue}`)
   } else {
-    lines.push(`glance couldn't paint this pane (${r.flash}). Open an issue at https://github.com/rogadev/glance/issues with this report.`)
+    const shown = r.flash_ms ? `for ${r.flash_ms / 1000} seconds` : 'for a moment'
+    lines.push(`glance showed the working color ${shown}, then put the pane back. Did you see the background change and change back?`)
+    lines.push(`If you didn't, your terminal ignores the color codes. ${issue}`)
   }
   const term = r.terminal ? `${r.terminal.name}: ${SUPPORT[r.terminal.support] || r.terminal.support}` : 'unknown'
+  lines.push('')
+  if (desktop) lines.push('Terminal: none (Claude Desktop)')
+  else lines.push(`Terminal: ${term}`, `Painter: ${r.painter} (flash ${r.flash}, restore ${r.restore})`)
   lines.push(
-    '',
-    `Terminal: ${term}`,
-    `Painter: ${r.painter} (flash ${r.flash}, restore ${r.restore})`,
-    `Now: ${r.state}, ${r.background ?? 0} background item(s)`,
+    `Now: ${plainState(r.state)}, ${r.background ?? 0} background item(s)`,
     `glance ${r.version} on ${r.platform}, Node ${r.node}, surface ${r.surface}`,
   )
   return lines.join('\n')
@@ -160,6 +177,16 @@ async function noteWorking($: EngineInterface, working: boolean) {
   }
 }
 
+/** Runs one of glance's own commands, with isWorking reports held off while it runs. */
+async function runOwn($: EngineInterface, input: object) {
+  ownCommands++
+  try {
+    return await glance($, input)
+  } finally {
+    ownCommands--
+  }
+}
+
 /** A hook's .catch: let the event go on as if glance weren't there. */
 function failOpen<E, R>(_$: EngineInterface, e: E, next: (e: E) => R): R {
   return next(e)
@@ -213,13 +240,7 @@ export const register: Register = (on) => {
 
   on('command.run', { command: CHECK }, async ($) => {
     const session_id = await $.session.id()
-    ownCommands++
-    let r
-    try {
-      r = await glance($, { hook_event_name: 'GlanceCheck', session_id, surface: lastSurface })
-    } finally {
-      ownCommands--
-    }
+    const r = await runOwn($, { hook_event_name: 'GlanceCheck', session_id, surface: lastSurface })
     if (!r) return { text: 'glance-check: could not run glance.mjs. Is Node.js installed and on PATH?' }
     if (r.exitCode !== 0) return { text: `glance-check: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     return { text: describeCheck(r.stdout) }
@@ -229,13 +250,7 @@ export const register: Register = (on) => {
     const session_id = await $.session.id()
     const agents = await $.agent.list()
     const live_agents = agents.filter((a) => LIVE.has(a.status)).map((a) => a.id)
-    ownCommands++
-    let r
-    try {
-      r = await glance($, { hook_event_name: 'GlanceReset', session_id, live_agents })
-    } finally {
-      ownCommands--
-    }
+    const r = await runOwn($, { hook_event_name: 'GlanceReset', session_id, live_agents })
     if (!r) return { text: 'glance-fix: could not run glance.mjs. Is Node.js installed and on PATH?' }
     if (r.exitCode !== 0) return { text: `glance-fix: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     return { text: describe(r.stdout) }

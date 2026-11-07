@@ -26,7 +26,7 @@ export const CONFIG = {
   // pane title) or UiIdle (the mod's isWorking) clears the tint.
   titleIdleConfirmMs: 2500,
   // The title watcher (paint.exe --watch) polls each pane's title to catch Esc.
-  // Off since the glance mod (mod/) reports Esc as TurnAborted with no polling.
+  // Off since the glance mod (hooks/register.tsx) reports Esc as TurnAborted with no polling.
   // Turn it back on for sessions that can't load the mod.
   titleWatcher: false,
   // How long /glance-check shows the working color before putting the pane back.
@@ -230,7 +230,7 @@ export function decide(prev, input, now) {
       return next(ATTENTION, 'stop-failure');
 
     case 'TurnAborted':
-      // From the glance mod (mod/hooks/register.ts): you pressed Esc. No settings
+      // From the glance mod (hooks/register.tsx): you pressed Esc. No settings
       // hook fires for that, so without the mod this case is TitleIdle's job.
       return busy() ? next(WORKING, BACKGROUND_RUNNING) : next(ATTENTION, 'aborted');
 
@@ -304,12 +304,13 @@ const TERMINALS = [
  * inherits from it. Pure, for the tests.
  *
  * @param {Record<string, string | undefined>} env For example process.env.
+ * @param {string} [platform] process.platform, or another for the tests.
  * @returns {{name: string, support: string}} support is 'confirmed',
  *   'expected', or 'unknown'.
  */
-export function detectTerminal(env) {
+export function detectTerminal(env, platform = process.platform) {
   for (const [name, test, support] of TERMINALS) if (test(env)) return { name, support };
-  if (process.platform === 'win32' && !env.TERM_PROGRAM) return { name: 'Windows console (conhost)', support: 'unknown' };
+  if (platform === 'win32' && !env.TERM_PROGRAM) return { name: 'Windows console (conhost)', support: 'unknown' };
   return { name: env.TERM_PROGRAM || env.TERM || 'unknown', support: 'unknown' };
 }
 
@@ -343,10 +344,13 @@ function check(input, stateFile) {
     painter: process.platform === 'win32' ? 'paint.exe' : 'tty',
     flash,
     restore,
+    flash_ms: CONFIG.checkFlashMs,
     state: `${state.state} [${state.reason}]`,
     background: Object.keys(liveBackground(state, Date.now())).length,
   };
   log(`${new Date().toISOString()} ${String(input.session_id || '').slice(0, 8)} main GlanceCheck -> ${report.state} flash:${flash} restore:${restore} terminal:${report.terminal.name}`);
+  // The state line first, as apply() prints it, so the mod's band stays current.
+  if (input.glance_via === 'mod') process.stdout.write(JSON.stringify({ state: state.state, color: CONFIG.workingColor }) + '\n');
   process.stdout.write(JSON.stringify(report) + '\n');
 }
 
@@ -524,14 +528,15 @@ function main() {
     fs.appendFileSync(path.join(CONFIG.stateDir, 'debug.jsonl'), raw.trim() + '\n');
   }
   const stateFile = path.join(CONFIG.stateDir, safeId(input.session_id) + '.json');
-  // Hooks for one session can run at the same moment (for example SubagentStart
-  // and the Agent tool's PostToolUse), so read, decide, write, and paint under a
-  // lock. That keeps the state file and the pane color in event order.
+  // /glance-check changes no state; it takes the lock only for its restore.
   if (input.hook_event_name === 'GlanceCheck') return check(input, stateFile);
   // UiIdle arrives the moment the engine stops working. Wait out the confirm
   // window first, so decide() sees any hook that lands meanwhile (a new prompt,
   // the next tool) and leaves the tint alone.
   if (input.hook_event_name === 'UiIdle') sleep(CONFIG.titleIdleConfirmMs + 100);
+  // Hooks for one session can run at the same moment (for example SubagentStart
+  // and the Agent tool's PostToolUse), so read, decide, write, and paint under a
+  // lock. That keeps the state file and the pane color in event order.
   withLock(stateFile + '.lock', () => apply(input, stateFile));
   if (input.hook_event_name === 'SessionStart') pruneOldStates();
 }
