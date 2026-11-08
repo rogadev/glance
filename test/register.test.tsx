@@ -331,6 +331,71 @@ test('a glance.mjs run that times out never blames Node.js, and is logged', asyn
   expect(logs.some((l) => l.includes('still running after 5000ms'))).toBe(true)
 })
 
+test('/glance-fix and /glance-check blame Node.js only when it cannot start', async ($, on) => {
+  let deny = TIMED_OUT
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('agent.list', () => ({ value: [] }))
+  on('process.run', () => ({ deny }) as never)
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('ui.log', () => ({ value: undefined }) as never)
+  on('command.run', () => ({ text: 'engine ran it' }))
+  for (const command of ['glance-fix', 'glance-check']) {
+    const slow = await $.command.run({ command })
+    expect(slow.text).toContain("didn't finish in time")
+    expect(slow.text).not.toContain('Node.js')
+  }
+  deny = NOT_FOUND
+  for (const command of ['glance-fix', 'glance-check']) {
+    expect((await $.command.run({ command })).text).toContain('Is Node.js installed')
+  }
+})
+
+test('a /glance-fix that fails leaves /glance-report no older snapshot', async ($, on) => {
+  let fail = false
+  const prompts: any[] = []
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('agent.list', () => ({ value: [] }))
+  on('process.run', () => (fail ? { deny: TIMED_OUT } : { value: { exitCode: 0, stdout: fixed(true) + '\n', stderr: '' } }) as never)
+  on('prompt.submit', (_, e) => (prompts.push(e), { text: e.text }))
+  engineBand(on)
+  on('command.run', () => ({ text: 'engine ran it' }))
+  await $.command.run({ command: 'glance-fix' })
+  fail = true
+  await $.command.run({ command: 'glance-fix' })
+  await $.command.run({ command: 'glance-report' })
+  await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking: false } })
+  await new Promise((res) => setTimeout(res, 0))
+  expect(prompts.length).toBe(1)
+  expect(prompts[0].text).not.toContain('fix-sess-1.json')
+  expect(prompts[0].text).toContain('ask me what went wrong')
+})
+
+test('a refused /glance-report prompt is logged, told to the user, and not retried', async ($, on) => {
+  const logs: string[] = []
+  const toasts: unknown[] = []
+  let submits = 0
+  // engineBand's own ui.log would clash with the one that collects logs here.
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }) as never)
+  on('prompt.submit', () => (submits++, { drop: 'a turn is in flight' }))
+  on('ui.log', (_, e) => (logs.push(e.text), { value: undefined }) as never)
+  on('ui.toast', (_, e) => (toasts.push(e), { value: undefined }) as never)
+  on('command.run', () => ({ text: 'engine ran it' }))
+  await $.command.run({ command: 'glance-report' })
+  const idle = () => $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking: false } })
+  await idle()
+  await idle()
+  await new Promise((res) => setTimeout(res, 0))
+  expect(submits).toBe(1)
+  expect(logs.filter((l) => l.includes('could not submit its prompt')).length).toBe(1)
+  expect(toasts.length).toBe(1)
+  expect(JSON.stringify(toasts[0])).toContain('/glance:report-issue')
+})
+
 test('a timeout does not use up the missing-Node.js notice', async ($, on) => {
   const toasts: unknown[] = []
   let calls = 0
