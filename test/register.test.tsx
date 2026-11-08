@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { cannotStart, describe, describeCheck, parsePane, reportPrompt } from '../hooks/register'
+import { cannotStart, describe, describeCheck, parsePane, reportPrompt, snapshotOf } from '../hooks/register'
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], runs: any[], stdout = '') {
@@ -342,6 +342,29 @@ test('a timeout does not use up the missing-Node.js notice', async ($, on) => {
   await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
   expect(toasts.length).toBe(1)
   expect(JSON.stringify(toasts[0])).toContain('Node.js')
+})
+
+test('a pane state that cannot be saved is logged, and never blamed on Node.js', async ($, on) => {
+  const toasts: unknown[] = []
+  const logs: string[] = []
+  const stops: unknown[] = []
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: WORKING, stderr: '' } }))
+  on('state.set', () => ({ deny: 'state store unavailable' }) as never)
+  on('ui.toast', (_, e) => (toasts.push(e), { value: undefined }) as never)
+  on('ui.log', (_, e) => (logs.push(e.text), { value: undefined }) as never)
+  on('classic.Stop', (_, e) => (stops.push(e), {}))
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  expect(stops.length).toBe(1)
+  expect(toasts.length).toBe(0)
+  expect(logs.filter((l) => l.includes('could not save the pane state')).length).toBe(1)
+})
+
+test('snapshotOf finds no snapshot in empty, broken, or snapshot-less output', () => {
+  expect(snapshotOf('')).toBe('')
+  expect(snapshotOf('not json')).toBe('')
+  expect(snapshotOf('{}')).toBe('')
+  expect(snapshotOf('{"snapshot":"/s/fix-1.json"}\n')).toBe('/s/fix-1.json')
 })
 
 test('only a command that cannot start counts as a missing Node.js', () => {

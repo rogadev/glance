@@ -308,6 +308,30 @@ test('/glance-fix on a working pane with nothing running reports a missed end of
   assert.match(d.cause, /12 min ago/);
 });
 
+test('/glance-fix names a scheduled wakeup by when it is due, ahead or overdue', () => {
+  const now = Date.UTC(2026, 10, 8, 12, 0);
+  const held = (dueAt) => ({
+    ...emptyState(),
+    state: WORKING,
+    reason: 'background-running',
+    updatedAt: now - MIN,
+    background: { 'wakeup:w1': { kind: 'wakeup', dueAt } },
+  });
+  const ahead = diagnoseReset(held(now + 5 * MIN), main('GlanceReset', { live_agents: [] }), now);
+  assert.equal(ahead.verdict, 'stale-background');
+  assert.match(ahead.cause, /wakeup wakeup:w1 \(due in 5 min\)/);
+  // One minute late is still inside the wakeup's allowance, so it's still tracked.
+  const late = diagnoseReset(held(now - MIN), main('GlanceReset', { live_agents: [] }), now);
+  assert.match(late.cause, /wakeup wakeup:w1 \(due 1 min ago\)/);
+});
+
+test('/glance-fix reports a missed agent end ahead of a stale shell', () => {
+  const stuck = run([main('UserPromptSubmit'), bgShell('dev'), sub('SubagentStart', 'gone'), main('Stop')]);
+  const d = diagnoseReset(stuck, main('GlanceReset', { live_agents: [] }), stuck.updatedAt + MIN);
+  assert.equal(d.verdict, 'missed-agent-end');
+  assert.equal(d.suspect, true);
+});
+
 test('/glance-fix on a pane glance already had as needs you points at painting', () => {
   const s = run([main('UserPromptSubmit'), main('Stop')]);
   const d = diagnoseReset(s, main('GlanceReset', { live_agents: [] }), s.updatedAt + MIN);
