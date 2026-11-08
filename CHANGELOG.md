@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0](https://github.com/rogadev/glance/compare/v0.3.1...v0.4.0) (2026-11-08)
+
+### Features
+
+* update a cloned glance with git pull from /glance-update ([435eb2c](https://github.com/rogadev/glance/commit/435eb2c483dc75f5535b60515d22c1dde96bcddc))
+
 ## [0.3.1](https://github.com/rogadev/glance/compare/v0.3.0...v0.3.1) (2026-11-08)
 
 ### Bug Fixes

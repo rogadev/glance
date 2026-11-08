@@ -376,18 +376,51 @@ export async function runUpdateCheck(io: UpdateIO, root: string): Promise<void> 
   }
 }
 
-/** What `/glance-update` needs from a finished `claude plugin update --json` run. */
+/** What `/glance-update` needs from a finished `claude plugin update` or `git` run. */
 type Ran = { exitCode: number; stdout: string; stderr: string }
 
+/** The first line of a run's output that says something, for a short message. */
+function firstLine(text: string): string {
+  return (text.split(/\r?\n/).find((l) => l.trim()) ?? '').trim().slice(0, 200)
+}
+
 /**
- * Updates glance with `claude plugin update` and says what happened, or says
- * how to update a glance that runs from a folder of its own. Never throws.
+ * Updates a glance that runs from a folder of its own (a clone loaded with
+ * `--plugin-dir` or `CLAUDE_CODE_PLUGIN_DIRS`) with `git pull --ff-only`, so
+ * it never merges or rewrites anything the user has there. Never throws.
+ */
+async function updateFolder(run: (argv: string[]) => Promise<Ran>, root: string): Promise<string> {
+  const byHand = `Update that folder by hand (for example, \`git pull\` in ${root}), then run /reload-plugins.`
+  let r: Ran
+  try {
+    r = await run(['git', '-C', root, 'rev-parse', '--is-inside-work-tree'])
+  } catch (err: unknown) {
+    return `${UPDATE}: glance runs from ${root}, and git couldn't run there (${String(err)}). ${byHand}`
+  }
+  if (r.exitCode !== 0 || r.stdout.trim() !== 'true') {
+    return `${UPDATE}: glance runs from ${root}, which isn't a git clone or a marketplace install, so glance can't update it. ${byHand}`
+  }
+  try {
+    r = await run(['git', '-C', root, 'pull', '--ff-only'])
+  } catch (err: unknown) {
+    return `${UPDATE}: couldn't run git pull in ${root} (${String(err)}). ${byHand}`
+  }
+  if (r.exitCode !== 0) {
+    const why = firstLine(r.stderr) || firstLine(r.stdout)
+    return `${UPDATE}: git pull in ${root} failed${why ? ` (${why})` : ''}. ${byHand}`
+  }
+  if (/already up to date/i.test(r.stdout)) return `${UPDATE}: glance in ${root} is already up to date.`
+  return `${UPDATE}: pulled the latest glance into ${root}. Run /reload-plugins to start using it.`
+}
+
+/**
+ * Updates glance and says what happened: with `claude plugin update` for a
+ * marketplace install, or with `git pull` for a clone glance runs from.
+ * Never throws.
  */
 export async function updateGlance(run: (argv: string[]) => Promise<Ran>, root: string): Promise<string> {
   const marketplace = marketplaceOf(root)
-  if (!marketplace) {
-    return `${UPDATE}: glance runs from ${root}, not a marketplace install, so update that folder (for example, git pull), then run /reload-plugins.`
-  }
+  if (!marketplace) return updateFolder(run, root)
   const id = `glance@${marketplace}`
   const byHand = `Run \`claude plugin update ${id}\` in a terminal, or update glance under /plugin, Installed.`
   let r: Ran
@@ -516,7 +549,7 @@ export const register: Register = (on) => {
 
   on('command.run', { command: UPDATE }, async ($) => {
     const run = (argv: string[]) => $.process.run(argv, { timeoutMs: 120_000 })
-    // claude plugin update can take a while, and isWorking is true the whole time.
+    // claude plugin update and git pull can take a while, and isWorking is true the whole time.
     return { text: await runOwn(() => updateGlance(run, $.plugin.root)) }
   }).catch((_$, _e, next) => ({ text: `${UPDATE} failed: ${String(next.error)}` }))
 
