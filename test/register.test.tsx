@@ -562,10 +562,10 @@ test('the update notice names both versions, the update command, and auto-update
 
 /** A stand-in for the engine under the update check, recording what it did. */
 function updateIO(opts: { latest?: string; ok?: boolean; env?: Record<string, string>; saved?: unknown } = {}) {
-  const seen = { fetches: [] as string[], logs: [] as string[], toasts: [] as string[], slept: 0, saved: opts.saved }
+  const seen = { fetches: [] as string[], reads: [] as string[], logs: [] as string[], toasts: [] as string[], slept: 0, saved: opts.saved }
   const io = {
     env: async (name: string) => opts.env?.[name],
-    readFile: async () => JSON.stringify({ name: 'glance', version: '0.2.0' }),
+    readFile: async (path: string) => (seen.reads.push(path), JSON.stringify({ name: 'glance', version: '0.2.0' })),
     load: async () => seen.saved,
     save: async (check: unknown) => {
       seen.saved = check
@@ -588,6 +588,7 @@ function updateIO(opts: { latest?: string; ok?: boolean; env?: Record<string, st
 test('a newer release is fetched once, saved for every window, and shown after a moment', async () => {
   const { io, seen } = updateIO()
   await runUpdateCheck(io, ROOT)
+  expect(seen.reads).toEqual([`${ROOT}/.claude-plugin/plugin.json`])
   expect(seen.fetches).toEqual(['https://raw.githubusercontent.com/rogadev/glance/main/.claude-plugin/plugin.json'])
   expect(seen.saved).toEqual({ checkedAt: 10 * DAY, latest: '0.3.0' })
   expect(seen.slept).toBeGreaterThan(0)
@@ -641,6 +642,23 @@ test('a failed fetch is logged, shows nothing, and is tried again next session',
   expect(seen.saved).toBe(undefined)
 })
 
+test('a fetch that answers 200 with no version is logged, saves nothing, and is tried again next session', async () => {
+  const { io, seen } = updateIO()
+  io.fetch = async () => ({ ok: true, status: 200, text: '{}' })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.toasts.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('got no version (HTTP 200)'))).toBe(true)
+  expect(seen.saved).toBe(undefined)
+})
+
+test('a glance whose own plugin.json has no version never fetches', async () => {
+  const { io, seen } = updateIO()
+  io.readFile = async () => '{}'
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('no version in its own plugin.json'))).toBe(true)
+})
+
 test('a fetch that throws is logged, never thrown', async () => {
   const { io, seen } = updateIO()
   io.fetch = async () => {
@@ -671,6 +689,25 @@ test('/glance-update says what failed and how to update by hand', async () => {
   expect(text).toContain('Plugin "glance" not found')
   expect(text).toContain('claude plugin update glance@glance')
   expect(text).not.toContain('/reload-plugins')
+})
+
+test('/glance-update falls back to stderr when the CLI prints no JSON', async () => {
+  const text = await updateGlance(async () => ({ exitCode: 1, stdout: 'boom', stderr: 'permission denied\n' }), ROOT)
+  expect(text).toContain('the update failed (permission denied)')
+  expect(text).toContain('claude plugin update glance@glance')
+})
+
+test('/glance-update reads the last line of the output, and fills in a missing message', async () => {
+  const last = await updateGlance(
+    async () => ({ exitCode: 0, stdout: 'Checking glance...\n{"outcome":"updated","message":"Updated glance to 0.3.0"}\n', stderr: '' }),
+    ROOT,
+  )
+  expect(last).toContain('Updated glance to 0.3.0')
+  const bare = await updateGlance(async () => ({ exitCode: 0, stdout: '', stderr: '' }), ROOT)
+  expect(bare).toContain('glance is updated')
+  expect(bare).toContain('/reload-plugins')
+  const failed = await updateGlance(async () => ({ exitCode: 1, stdout: '', stderr: '' }), ROOT)
+  expect(failed).toContain('the update failed. ')
 })
 
 test('/glance-update that cannot run the CLI says how to update by hand', async () => {
