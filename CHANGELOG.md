@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/rogadev/glance/compare/v0.2.0...v0.3.0) (2026-11-08)
+
+
+### Features
+
+* /glance-fix explains what held the tint, and /glance-report hands it to Claude to file ([8c0cf50](https://github.com/rogadev/glance/commit/8c0cf50d652462f9086d31334a6f270dc2188fbc))
+* add /glance-update, which updates glance with claude plugin update ([837d4ce](https://github.com/rogadev/glance/commit/837d4cebcc749fe125e8ffd2a9fe89c097119e7a))
+* add /glance:report-issue, a skill that researches and drafts a glance issue ([b77a587](https://github.com/rogadev/glance/commit/b77a587f29ba01a539e959d91a7d8c41069506a2))
+* report-issue skill, /glance-fix diagnosis, narrower Node.js notice ([6602f9c](https://github.com/rogadev/glance/commit/6602f9c4b25a73aa5c725e38c4bf3b40946f457c))
+* tell users once a day when a newer glance is out ([22aee2a](https://github.com/rogadev/glance/commit/22aee2a83bc3a854c645158f53e6455121f27767))
+* update notice and /glance-update command ([fd7ca0d](https://github.com/rogadev/glance/commit/fd7ca0d15e3c54d0ac1622091b86f05a55490a04))
+
+
+### Bug Fixes
+
+* check for updates again when the saved check is dated in the future ([2f14b34](https://github.com/rogadev/glance/commit/2f14b340bd232f02d6c2e3891e803948bfbf16d0))
+* give the report skill's quote escape for PowerShell as well as bash ([5b740cc](https://github.com/rogadev/glance/commit/5b740cc4ca2ce122061d59baf96000e2a6d443d6))
+* hold isWorking reports while /glance-update runs ([6f1074f](https://github.com/rogadev/glance/commit/6f1074fe744e562fb48033fe617ee976a1a3d9d4))
+* keep issue titles and search terms out of double quotes in the report skill ([b46b1ec](https://github.com/rogadev/glance/commit/b46b1ece06833aac02533ea9f0e4763ad9f4783d))
+* keep outside text off the report skill's command lines instead of escaping it ([b586dea](https://github.com/rogadev/glance/commit/b586dea20b4ac76d7a93ec5c86387bb0903f3260))
+* say why a /glance-fix snapshot's log is empty when events.log can't be read ([72ed23c](https://github.com/rogadev/glance/commit/72ed23c94ef994d6ae07e94b3dd02b1e399b1a18))
+* show the missing-Node.js notice only when node can't start, not on a slow run ([1859750](https://github.com/rogadev/glance/commit/18597506b22fab0b444c064044d1c473c7691f04)), closes [#11](https://github.com/rogadev/glance/issues/11)
+* tell a timed-out /glance-fix or /glance-check apart from a missing Node.js ([9eadbe7](https://github.com/rogadev/glance/commit/9eadbe753806e662f3d8c93a9303926775043f66))
+
 ## [0.2.0](https://github.com/rogadev/glance/compare/v0.1.0...v0.2.0) (2026-11-07)
 
 
