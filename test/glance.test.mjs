@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ancestorTtyFrom, decide, detectTerminal, diagnoseReset, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
+import { ancestorTtyFrom, backgroundChanges, decide, detectTerminal, diagnoseReset, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
 
 const T = 1_000_000;
 
@@ -22,7 +22,8 @@ const sub = (hook_event_name, agent_id, extra = {}) => ({ hook_event_name, agent
 const ids = (s) => Object.keys(s.background);
 
 // The real prompt Claude Code sends when background work ends. Killed agents get
-// no SubagentStop and shells get no hook at all, so this is the only end signal.
+// no SubagentStop and shells get no hook at all, so this is their end signal
+// (except a shell stopped with TaskStop, which gets none; see taskStop below).
 const notice = (id, status = 'killed') =>
   `<task-notification>\n<task-id>${id}</task-id>\n<tool-use-id>toolu_x</tool-use-id>\n` +
   `<output-file>C:\\tmp\\tasks\\${id}.output</output-file>\n<status>${status}</status>\n` +
@@ -139,6 +140,56 @@ test('a background shell (for example a CI watch) keeps the pane working after S
   const done = run([main('UserPromptSubmit', { prompt: notice('b37q4qei1', 'completed') }), main('Stop')], waiting);
   assert.equal(done.state, ATTENTION);
   assert.deepEqual(ids(done), []);
+});
+
+// TaskStop's PostToolUse, as Claude Code 2.1.319 sends it. No task notification follows.
+const taskStop = (id, extra = {}) =>
+  main('PostToolUse', {
+    tool_name: 'TaskStop',
+    tool_input: { task_id: id },
+    tool_response: { message: `Successfully stopped task: ${id} (sleep 300)`, task_id: id, task_type: 'local_bash' },
+    ...extra,
+  });
+
+test('a shell stopped with TaskStop no longer holds the tint', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('bn6pdd0nr'), taskStop('bn6pdd0nr'), main('Stop')]);
+  assert.equal(s.state, ATTENTION);
+  assert.deepEqual(ids(s), []);
+});
+
+test('TaskStop clears only the shell it stopped', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('b1'), bgShell('b2'), taskStop('b1'), main('Stop')]);
+  assert.equal(s.state, WORKING);
+  assert.deepEqual(ids(s), ['b2']);
+});
+
+test('TaskStop takes the id from its input when the response has none, and the older KillShell works too', () => {
+  const fromInput = run([bgShell('b1'), main('PostToolUse', { tool_name: 'TaskStop', tool_input: { task_id: 'b1' }, tool_response: {} }), main('Stop')]);
+  assert.deepEqual(ids(fromInput), []);
+  const deprecated = run([bgShell('b1'), main('PostToolUse', { tool_name: 'TaskStop', tool_input: { shell_id: 'b1' }, tool_response: {} }), main('Stop')]);
+  assert.deepEqual(ids(deprecated), []);
+  const kill = run([bgShell('b1'), main('PostToolUse', { tool_name: 'KillShell', tool_input: { shell_id: 'b1' }, tool_response: {} }), main('Stop')]);
+  assert.deepEqual(ids(kill), []);
+});
+
+test('a TaskStop that failed keeps the shell, since it may still be running', () => {
+  const s = run([bgShell('b1'), taskStop('b1', { hook_event_name: 'PostToolUseFailure' }), main('Stop')]);
+  assert.equal(s.state, WORKING);
+  assert.deepEqual(ids(s), ['b1']);
+});
+
+test('a subagent stopping a shell clears it too', () => {
+  const s = run([bgShell('b1'), sub('PostToolUse', 'a1', { tool_name: 'TaskStop', tool_input: { task_id: 'b1' }, tool_response: { task_id: 'b1' } }), main('Stop')]);
+  assert.deepEqual(ids(s), []);
+});
+
+test('the log names background items as they are added and removed', () => {
+  assert.equal(backgroundChanges({}, {}), '');
+  assert.equal(backgroundChanges({}, { b1: { kind: 'shell' } }), ' (+shell b1)');
+  assert.equal(backgroundChanges({ b1: { kind: 'shell' }, a1: { kind: 'agent' } }, { a1: { kind: 'agent' } }), ' (-shell b1)');
+  assert.equal(backgroundChanges({ b1: { kind: 'shell' } }, { b2: { kind: 'shell' } }), ' (+shell b2, -shell b1)');
+  assert.equal(backgroundChanges({ b1: { kind: 'shell' } }, null), ' (-shell b1)');
+  assert.equal(backgroundChanges(undefined, { a1: {} }), ' (+agent a1)');
 });
 
 test('a foreground shell call is not tracked as background work', () => {

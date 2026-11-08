@@ -47,6 +47,9 @@ const SETTLED = new Set(['session-start', 'stop', 'stop-failure', 'aborted', 'co
 // Tools whose whole purpose is to wait for an answer from you.
 const ASKING_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+// Tools that stop background work. KillShell is TaskStop's older name.
+const STOP_TOOLS = new Set(['TaskStop', 'KillShell']);
+
 // Notification types that mean "you need to look at this pane".
 const ATTENTION_NOTIFICATIONS = new Set([
   'permission_prompt',
@@ -165,6 +168,23 @@ export function diagnoseReset(prev, input, now) {
   };
 }
 
+/**
+ * Describes the background items one event added and removed, for the log line.
+ *
+ * @param {object | undefined} before The background map before the event.
+ * @param {object | null | undefined} after The background map after it.
+ * @returns {string} For example ` (+shell b1, -agent a2)`, or an empty string when nothing changed.
+ */
+export function backgroundChanges(before, after) {
+  const was = before || {};
+  const now = after || {};
+  const kind = (item) => item?.kind || 'agent';
+  const added = Object.keys(now).filter((id) => !(id in was)).map((id) => `+${kind(now[id])} ${id}`);
+  const removed = Object.keys(was).filter((id) => !(id in now)).map((id) => `-${kind(was[id])} ${id}`);
+  const changes = [...added, ...removed];
+  return changes.length ? ` (${changes.join(', ')})` : '';
+}
+
 /** True when any background work should keep the pane working right now. */
 function holdsTint(background, now) {
   return Object.values(background).some((item) => !SCHEDULED.has(item.kind) || scheduleHoldsTint(item, now));
@@ -241,8 +261,9 @@ export function decide(prev, input, now) {
       return null;
 
     case 'UserPromptSubmit':
-      // Killed agents send no SubagentStop and shells send nothing at all, but
-      // every way background work ends delivers a task notification as a prompt.
+      // Killed agents send no SubagentStop and shells send no hook at all, so
+      // their end arrives as a task notification in a prompt. The exception is
+      // a shell stopped with TaskStop, handled on that tool's PostToolUse.
       for (const id of endedTaskIds(input.prompt)) delete background[id];
       // A scheduled run firing arrives as its own prompt.
       for (const [id, item] of Object.entries(background)) {
@@ -263,6 +284,12 @@ export function decide(prev, input, now) {
     case 'ElicitationResult': {
       const shellId = input.tool_response?.backgroundTaskId;
       if (shellId) background[shellId] = { kind: 'shell', at: now };
+      // A shell stopped with TaskStop gets no task notification, so its
+      // PostToolUse is the only sign it ended. A failed stop keeps it.
+      if (event === 'PostToolUse' && STOP_TOOLS.has(input.tool_name)) {
+        const stopped = input.tool_response?.task_id || input.tool_input?.task_id || input.tool_input?.shell_id;
+        if (stopped) delete background[stopped];
+      }
       if (fromMain && event === 'PostToolUse') trackSchedules(background, input, now);
       // A subagent's tool finishing only clears attention that subagent caused,
       // never a question the main thread is waiting on.
@@ -769,7 +796,7 @@ function apply(input, stateFile) {
   log(
     `${new Date(now).toISOString()} ${sid} ${who} ${input.hook_event_name}` +
       `${detail ? ` (${detail})` : ''} -> ${next ? next.state : 'reset'} [${next ? next.reason : 'session-end'}]` +
-      ` bg=${bgCount} ${written}${watch ? ' ' + watch : ''}`,
+      ` bg=${bgCount}${backgroundChanges(liveBackground(prev, now), next?.background)} ${written}${watch ? ' ' + watch : ''}`,
   );
 }
 

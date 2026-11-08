@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1](https://github.com/rogadev/glance/compare/v0.3.0...v0.3.1) (2026-11-08)
+
+### Bug Fixes
+
+* stop tracking a background shell once TaskStop stops it ([6a474c3](https://github.com/rogadev/glance/commit/6a474c3ca59eac7eb6873dddba3224f876900cd4))
+
 ## [0.3.0](https://github.com/rogadev/glance/compare/v0.2.0...v0.3.0) (2026-11-08)
 
 

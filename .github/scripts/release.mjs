@@ -6,10 +6,12 @@
 // part of what gets merged. `notes <version>` prints that version's section,
 // which the release workflow publishes on main.
 //
-// The rules (conventional commits, as releases here have always used): a breaking change
-// (`feat!:`, or a `BREAKING CHANGE:` footer) bumps the major version, or the
-// minor one before 1.0.0; `feat:` bumps the minor version; `fix:` and
-// `perf:` bump the patch; anything else releases nothing on its own.
+// The rules, for a version a.b.c: a `feat:` bumps b (and resets c); any other
+// code change (`fix:`, `perf:`, `refactor:`, `revert:`) bumps c; `docs:`,
+// `test:`, `ci:`, and `chore:` release nothing on their own. Nothing here
+// bumps a: the maintainer raises it by hand in plugin.json on dev, and that
+// version is kept. A breaking mark (`feat!:`, a `BREAKING CHANGE:` footer)
+// only lists the commit under its own changelog heading.
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -33,14 +35,17 @@ export function parseCommit({ sha, subject, body }) {
   return { sha, type: m[1].toLowerCase(), breaking, description: m[3] }
 }
 
+/** Commit types that change the code users run, short of a feature: each is a patch release. */
+const PATCH_TYPES = new Set(['fix', 'perf', 'refactor', 'revert'])
+
 /**
- * Gets the kind of bump a list of parsed commits calls for.
- * @returns {'major' | 'minor' | 'patch' | null}
+ * Gets the kind of bump a list of parsed commits calls for. Never the major
+ * version: the maintainer sets that by hand (see `plan`).
+ * @returns {'minor' | 'patch' | null}
  */
 export function bumpOf(parsed) {
-  if (parsed.some((c) => c.breaking)) return 'major'
   if (parsed.some((c) => c.type === 'feat')) return 'minor'
-  if (parsed.some((c) => c.type === 'fix' || c.type === 'perf')) return 'patch'
+  if (parsed.some((c) => PATCH_TYPES.has(c.type))) return 'patch'
   return null
 }
 
@@ -51,12 +56,11 @@ export function parseVersion(v) {
   return [Number(m[1]), Number(m[2]), Number(m[3])]
 }
 
-/** Applies a bump to an `x.y.z` version. A major bump before 1.0.0 is a minor one. */
+/** Applies a minor or patch bump to an `x.y.z` version. */
 export function nextVersion(base, bump) {
   const [major, minor, patch] = parseVersion(base)
   if (!bump) return base
-  if (bump === 'major' && major > 0) return `${major + 1}.0.0`
-  if (bump === 'major' || bump === 'minor') return `${major}.${minor + 1}.0`
+  if (bump === 'minor') return `${major}.${minor + 1}.0`
   return `${major}.${minor}.${patch + 1}`
 }
 
@@ -78,6 +82,7 @@ export function changelogSection(version, base, date, parsed) {
     ['⚠ BREAKING CHANGES', parsed.filter((c) => c.breaking)],
     ['Features', parsed.filter((c) => c.type === 'feat' && !c.breaking)],
     ['Bug Fixes', parsed.filter((c) => (c.type === 'fix' || c.type === 'perf') && !c.breaking)],
+    ['Other changes', parsed.filter((c) => (c.type === 'refactor' || c.type === 'revert') && !c.breaking)],
   ]
   const parts = [`## [${version}](${REPO_URL}/compare/v${base}...v${version}) (${date})`]
   for (const [title, commits] of groups) {
@@ -119,14 +124,17 @@ export function notesFor(text, version) {
 
 /**
  * Works out what `prepare` writes, from the version on main, the commits on
- * dev since main, and today's date. Returns null when nothing releases.
+ * dev since main, today's date, and the version in dev's plugin.json. A major
+ * version raised by hand on dev is kept as it is; any other version on dev is
+ * replaced by the computed one. Returns null when nothing releases.
  */
-export function plan(base, commits, date) {
+export function plan(base, commits, date, current = base) {
   const parsed = commits
     .filter((c) => !RELEASE_SUBJECT.test(c.subject))
     .map(parseCommit)
     .filter((c) => c !== null)
-  const version = nextVersion(base, bumpOf(parsed))
+  const byHand = parseVersion(current)[0] > parseVersion(base)[0]
+  const version = byHand ? current : nextVersion(base, bumpOf(parsed))
   if (version === base) return null
   return { version, section: changelogSection(version, base, date, parsed) }
 }
@@ -149,9 +157,9 @@ function commitsSince(ref) {
 function prepare(baseRef) {
   const base = JSON.parse(git('show', `${baseRef}:${PLUGIN}`)).version
   const since = git('merge-base', 'HEAD', baseRef).trim()
-  const result = plan(base, commitsSince(since), new Date().toISOString().slice(0, 10))
   const pluginText = readFileSync(PLUGIN, 'utf8')
   const current = JSON.parse(pluginText).version
+  const result = plan(base, commitsSince(since), new Date().toISOString().slice(0, 10), current)
   const version = result?.version ?? base
   console.log(result ? `Release ${version} (main has ${base}).` : `Nothing to release (main has ${base}).`)
   if (current !== version) {

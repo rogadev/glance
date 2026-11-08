@@ -27,21 +27,35 @@ test('parseCommit reads the type, a scope, and a breaking mark', () => {
   assert.equal(parseCommit(commit('update the readme')), null)
 })
 
-test('bumpOf picks the largest bump the commits call for', () => {
+test('bumpOf: a feature bumps the minor version, any other code change the patch, and nothing bumps the major', () => {
   assert.equal(bumpOf(types('docs: a', 'test: b', 'chore: c', 'ci: d')), null)
   assert.equal(bumpOf(types('docs: a', 'fix: b')), 'patch')
   assert.equal(bumpOf(types('perf: a')), 'patch')
+  assert.equal(bumpOf(types('refactor: a')), 'patch')
+  assert.equal(bumpOf(types('revert: a')), 'patch')
   assert.equal(bumpOf(types('fix: a', 'feat: b')), 'minor')
-  assert.equal(bumpOf(types('feat: a', 'refactor!: b')), 'major')
+  assert.equal(bumpOf(types('fix!: a')), 'patch')
+  assert.equal(bumpOf(types('feat!: a')), 'minor')
+  assert.equal(bumpOf(types('chore!: a')), null)
 })
 
-test('nextVersion bumps, and a breaking change before 1.0.0 is a minor bump', () => {
+test('nextVersion bumps the minor or patch part', () => {
   assert.equal(nextVersion('0.3.0', 'patch'), '0.3.1')
   assert.equal(nextVersion('0.3.4', 'minor'), '0.4.0')
-  assert.equal(nextVersion('0.3.4', 'major'), '0.4.0')
-  assert.equal(nextVersion('1.2.3', 'major'), '2.0.0')
+  assert.equal(nextVersion('1.2.3', 'minor'), '1.3.0')
   assert.equal(nextVersion('1.2.3', null), '1.2.3')
   assert.throws(() => nextVersion('1.2', 'patch'), /not an x\.y\.z version/)
+})
+
+test('a major version set by hand on dev is kept, with or without releasable commits', () => {
+  assert.equal(plan('0.3.0', [commit('feat: a')], '2026-11-08', '1.0.0').version, '1.0.0')
+  assert.equal(plan('0.3.0', [commit('docs: a')], '2026-11-08', '1.0.0').version, '1.0.0')
+  assert.match(plan('0.3.0', [], '2026-11-08', '1.0.0').section, /^## \[1\.0\.0\]/)
+})
+
+test('a minor or patch version set by hand on dev is replaced by the computed one', () => {
+  assert.equal(plan('0.3.0', [commit('fix: a')], '2026-11-08', '0.9.0').version, '0.3.1')
+  assert.equal(plan('0.3.0', [commit('docs: a')], '2026-11-08', '0.3.5'), null)
 })
 
 test('plan releases nothing for docs, tests, and chores, and never counts its own commit', () => {
@@ -62,6 +76,11 @@ test('plan gives the next version and its changelog section', () => {
       `* one ([1111111](${REPO_URL}/commit/${'1'.repeat(40)}))`,
     ].join('\n\n') + '\n',
   )
+})
+
+test('a refactor or revert is listed under Other changes', () => {
+  const s = changelogSection('0.3.1', '0.3.0', '2026-11-08', types('refactor: tidy', 'revert: undo'))
+  assert.match(s, /### Other changes\n\n\* tidy[^\n]*\n\* undo/)
 })
 
 test('a breaking change is listed under its own heading only', () => {
