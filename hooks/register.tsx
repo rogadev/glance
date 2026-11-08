@@ -141,7 +141,8 @@ export function describeCheck(stdout: string): string {
 let lastSurface = 'unknown'
 // Where the last /glance-fix saved its snapshot, for /glance-report.
 let lastSnapshot = ''
-// The prompt /glance-report queued, submitted once its turn completes.
+// The prompt /glance-report queued, submitted at the next idle draw of the
+// prompt area.
 let pendingReport = ''
 
 /** Submits the prompt /glance-report queued. Not awaited: it is a turn of its own. */

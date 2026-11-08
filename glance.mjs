@@ -104,10 +104,11 @@ function ago(ms) {
 }
 
 /**
- * What /glance-fix found before it reset the pane: a verdict, whether it looks
- * like a glance bug (suspect, which makes the command suggest /glance-report),
- * and the cause in plain words. Pure; `prev` is the state before the reset and
- * `input.live_agents` the agents the engine still lists as running.
+ * Diagnoses what held the pane before /glance-fix reset it, returning a
+ * verdict, whether it looks like a glance bug (suspect, which makes the
+ * command suggest /glance-report), and the cause in plain words. Pure; `prev`
+ * is the state before the reset and `input.live_agents` the agents the engine
+ * still lists as running.
  */
 export function diagnoseReset(prev, input, now) {
   const live = new Set(Array.isArray(input.live_agents) ? input.live_agents.map(String) : []);
