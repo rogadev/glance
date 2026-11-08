@@ -261,6 +261,121 @@ async function runOwn($: EngineInterface, input: object) {
   }
 }
 
+// Update check. Claude Code auto-updates plugins from a third-party
+// marketplace only when the user turns that on, so glance looks for a newer
+// release itself, at most once a day across all windows, and says so in a
+// toast at the start of each session while it is behind.
+
+const UPDATE = 'glance-update'
+const LATEST_URL = 'https://raw.githubusercontent.com/rogadev/glance/main/.claude-plugin/plugin.json'
+const CHECK_EVERY_MS = 24 * 60 * 60 * 1000
+// The toast waits for the session's screen to be up.
+const NOTICE_DELAY_MS = 3000
+
+/** What the update check keeps in `$.store`, shared by every session. */
+type UpdateCheck = { checkedAt?: number; latest?: string }
+
+/**
+ * Checks whether version `latest` is newer than `installed`, both `x.y.z`.
+ * Anything that isn't three numbers counts as not newer, so a bad answer
+ * never shows a notice.
+ */
+export function isNewer(latest: string, installed: string): boolean {
+  const parse = (v: string) => (/^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : null)
+  const a = parse(latest)
+  const b = parse(installed)
+  if (!a || !b) return false
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! > b[i]!
+  return false
+}
+
+/**
+ * Gets the marketplace glance was installed from, read off its folder
+ * (`.../plugins/cache/<marketplace>/glance/<version>`), or '' when glance runs
+ * from a folder of its own (`--plugin-dir`, `CLAUDE_CODE_PLUGIN_DIRS`).
+ */
+export function marketplaceOf(root: string): string {
+  const m = /[\\/]plugins[\\/]cache[\\/]([^\\/]+)[\\/]glance[\\/][^\\/]+[\\/]?$/.exec(root)
+  return m?.[1] ?? ''
+}
+
+/** Checks whether the last update check is old enough to fetch again. */
+export function checkDue(check: UpdateCheck, now: number): boolean {
+  return typeof check.checkedAt !== 'number' || now - check.checkedAt >= CHECK_EVERY_MS
+}
+
+/** Builds the toast that says a newer glance is out. */
+export function updateNotice(latest: string, installed: string): string {
+  return `glance ${latest} is out (you have ${installed}). Run /${UPDATE}, then /reload-plugins. To get updates on their own, turn on auto-update for the glance marketplace under /plugin, Marketplaces.`
+}
+
+/** What the update check reads and does, so tests can stand in for the engine. */
+export type UpdateIO = {
+  env: (name: 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC' | 'DISABLE_AUTOUPDATER' | 'DISABLE_UPDATES') => Promise<string | undefined>
+  readFile: (path: string) => Promise<string>
+  load: () => Promise<unknown>
+  save: (check: UpdateCheck) => Promise<void>
+  fetch: (url: string) => Promise<{ ok: boolean; status: number; text: string }>
+  now: () => Promise<number>
+  sleep: (ms: number) => Promise<void>
+  log: (text: string) => void
+  toast: (text: string) => void
+}
+
+/**
+ * Shows the update notice when a newer glance is out, fetching the latest
+ * version at most once a day. Never throws; each reason it stops is logged.
+ */
+export async function runUpdateCheck(io: UpdateIO, root: string): Promise<void> {
+  try {
+    const quiet =
+      (await io.env('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')) || (await io.env('DISABLE_AUTOUPDATER')) || (await io.env('DISABLE_UPDATES'))
+    if (quiet) return io.log('glance: update check off (an update or network setting turns it off)')
+    if (!marketplaceOf(root)) return io.log(`glance: update check off (runs from ${root}, not a marketplace install)`)
+    const installed = JSON.parse(await io.readFile(`${root}/.claude-plugin/plugin.json`)).version
+    if (typeof installed !== 'string') return io.log('glance: update check found no version in its own plugin.json')
+    let check = ((await io.load()) ?? {}) as UpdateCheck
+    const now = await io.now()
+    if (checkDue(check, now)) {
+      const r = await io.fetch(LATEST_URL)
+      const latest = r.ok ? JSON.parse(r.text).version : undefined
+      if (typeof latest !== 'string') return io.log(`glance: update check got no version (HTTP ${r.status})`)
+      check = { checkedAt: now, latest }
+      await io.save(check)
+    }
+    if (check.latest && isNewer(check.latest, installed)) {
+      await io.sleep(NOTICE_DELAY_MS)
+      io.toast(updateNotice(check.latest, installed))
+    }
+  } catch (err: unknown) {
+    io.log(`glance: update check failed: ${String(err)}`)
+  }
+}
+
+/** Runs the update check on the engine. Not awaited by its caller. */
+function checkForUpdate($: EngineInterface, root: string) {
+  return runUpdateCheck(
+    {
+      // Each name spelled out: the engine reads the variables a module uses off its source.
+      env: (name) =>
+        name === 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'
+          ? $.env.get('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')
+          : name === 'DISABLE_AUTOUPDATER'
+            ? $.env.get('DISABLE_AUTOUPDATER')
+            : $.env.get('DISABLE_UPDATES'),
+      readFile: (path) => $.fs.read(path),
+      load: () => $.store.get('update'),
+      save: (check) => $.store.set('update', check),
+      fetch: (url) => $.http.fetch(url),
+      now: () => $.clock.now(),
+      sleep: (ms) => $.clock.sleep(ms),
+      log: (text) => $.ui.log(text, { to: 'debug' }),
+      toast: (text) => $.ui.toast(text),
+    },
+    root,
+  )
+}
+
 /** A hook's .catch: let the event go on as if glance weren't there. */
 function failOpen<E, R>(_$: EngineInterface, e: E, next: (e: E) => R): R {
   return next(e)
@@ -313,6 +428,8 @@ export const register: Register = (on) => {
       name: REPORT,
       description: 'Have Claude research a glance problem (from the last /glance-fix, if any) and draft an issue for the glance maintainers',
     })
+    // Not awaited: the check must never hold up the session.
+    if (e.isInteractive) void checkForUpdate($, $.plugin.root)
     return next(e)
   })
 

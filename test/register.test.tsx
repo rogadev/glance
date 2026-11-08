@@ -1,5 +1,17 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { cannotStart, describe, describeCheck, parsePane, reportPrompt, snapshotOf } from '../hooks/register'
+import {
+  cannotStart,
+  checkDue,
+  describe,
+  describeCheck,
+  isNewer,
+  marketplaceOf,
+  parsePane,
+  reportPrompt,
+  runUpdateCheck,
+  snapshotOf,
+  updateNotice,
+} from '../hooks/register'
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], runs: any[], stdout = '') {
@@ -485,4 +497,131 @@ test('parsePane takes only a well-formed state line', async () => {
   expect(parsePane('{"state":"busy","color":"#1F2D3D"}')).toBeNull()
   expect(parsePane('{"state":"working"}')).toBeNull()
   expect(parsePane('')).toBeNull()
+})
+
+// The update check. ROOT is where a marketplace install of glance lives.
+const ROOT = '/home/u/.claude/plugins/cache/glance/glance/0.2.0'
+const DAY = 24 * 60 * 60 * 1000
+
+test('isNewer compares x.y.z versions, and nothing else counts as newer', () => {
+  expect(isNewer('0.3.0', '0.2.0')).toBe(true)
+  expect(isNewer('0.10.0', '0.9.9')).toBe(true)
+  expect(isNewer('1.0.0', '0.99.0')).toBe(true)
+  expect(isNewer('0.2.0', '0.2.0')).toBe(false)
+  expect(isNewer('0.1.9', '0.2.0')).toBe(false)
+  expect(isNewer('0.3.0-beta', '0.2.0')).toBe(false)
+  expect(isNewer('', '0.2.0')).toBe(false)
+})
+
+test('marketplaceOf reads the marketplace off an install folder, and gives none for a folder of its own', () => {
+  expect(marketplaceOf(ROOT)).toBe('glance')
+  expect(marketplaceOf(String.raw`C:\Users\u\.claude\plugins\cache\rogadev-glance\glance\0.2.0`)).toBe('rogadev-glance')
+  expect(marketplaceOf(String.raw`C:\Users\u\Documents\GitHub\glance`)).toBe('')
+  expect(marketplaceOf('/home/u/.claude/plugins/cache/glance/other/1.0.0')).toBe('')
+})
+
+test('checkDue fetches again only once a day has passed', () => {
+  expect(checkDue({}, 5)).toBe(true)
+  expect(checkDue({ checkedAt: 0, latest: '0.2.0' }, DAY - 1)).toBe(false)
+  expect(checkDue({ checkedAt: 0, latest: '0.2.0' }, DAY)).toBe(true)
+})
+
+test('the update notice names both versions, the update command, and auto-update', () => {
+  const text = updateNotice('0.3.0', '0.2.0')
+  expect(text).toContain('0.3.0')
+  expect(text).toContain('0.2.0')
+  expect(text).toContain('/glance-update')
+  expect(text).toContain('/reload-plugins')
+  expect(text).toContain('auto-update')
+})
+
+/** A stand-in for the engine under the update check, recording what it did. */
+function updateIO(opts: { latest?: string; ok?: boolean; env?: Record<string, string>; saved?: unknown } = {}) {
+  const seen = { fetches: [] as string[], logs: [] as string[], toasts: [] as string[], slept: 0, saved: opts.saved }
+  const io = {
+    env: async (name: string) => opts.env?.[name],
+    readFile: async () => JSON.stringify({ name: 'glance', version: '0.2.0' }),
+    load: async () => seen.saved,
+    save: async (check: unknown) => {
+      seen.saved = check
+    },
+    fetch: async (url: string) => {
+      seen.fetches.push(url)
+      const ok = opts.ok ?? true
+      return { ok, status: ok ? 200 : 404, text: ok ? JSON.stringify({ version: opts.latest ?? '0.3.0' }) : 'Not Found' }
+    },
+    now: async () => 10 * DAY,
+    sleep: async (ms: number) => {
+      seen.slept += ms
+    },
+    log: (text: string) => void seen.logs.push(text),
+    toast: (text: string) => void seen.toasts.push(text),
+  }
+  return { io, seen }
+}
+
+test('a newer release is fetched once, saved for every window, and shown after a moment', async () => {
+  const { io, seen } = updateIO()
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches).toEqual(['https://raw.githubusercontent.com/rogadev/glance/main/.claude-plugin/plugin.json'])
+  expect(seen.saved).toEqual({ checkedAt: 10 * DAY, latest: '0.3.0' })
+  expect(seen.slept).toBeGreaterThan(0)
+  expect(seen.toasts.length).toBe(1)
+  expect(seen.toasts[0]).toContain('glance 0.3.0 is out (you have 0.2.0)')
+})
+
+test('a check saved today is used without fetching, and still shows the notice', async () => {
+  const { io, seen } = updateIO({ saved: { checkedAt: 10 * DAY - 60_000, latest: '0.3.0' } })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.toasts.length).toBe(1)
+})
+
+test('a check saved yesterday is fetched again', async () => {
+  const { io, seen } = updateIO({ saved: { checkedAt: 9 * DAY - 1, latest: '0.2.0' }, latest: '0.4.0' })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(1)
+  expect(seen.toasts[0]).toContain('glance 0.4.0 is out')
+})
+
+test('an up-to-date glance shows nothing', async () => {
+  const { io, seen } = updateIO({ latest: '0.2.0' })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(1)
+  expect(seen.toasts.length).toBe(0)
+})
+
+test('each update or network setting turns the check off', async () => {
+  for (const name of ['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'DISABLE_AUTOUPDATER', 'DISABLE_UPDATES']) {
+    const { io, seen } = updateIO({ env: { [name]: '1' } })
+    await runUpdateCheck(io, ROOT)
+    expect(seen.fetches.length).toBe(0)
+    expect(seen.toasts.length).toBe(0)
+    expect(seen.logs.some((l) => l.includes('update check off'))).toBe(true)
+  }
+})
+
+test('glance run from a folder of its own never checks', async () => {
+  const { io, seen } = updateIO()
+  await runUpdateCheck(io, '/home/u/src/glance')
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('not a marketplace install'))).toBe(true)
+})
+
+test('a failed fetch is logged, shows nothing, and is tried again next session', async () => {
+  const { io, seen } = updateIO({ ok: false })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.toasts.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('HTTP 404'))).toBe(true)
+  expect(seen.saved).toBe(undefined)
+})
+
+test('a fetch that throws is logged, never thrown', async () => {
+  const { io, seen } = updateIO()
+  io.fetch = async () => {
+    throw new Error('offline')
+  }
+  await runUpdateCheck(io, ROOT)
+  expect(seen.toasts.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('update check failed: Error: offline'))).toBe(true)
 })
