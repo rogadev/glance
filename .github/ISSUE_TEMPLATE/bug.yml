@@ -1,0 +1,53 @@
+name: Bug report
+description: glance did something wrong, such as a stuck tint, a wrong color, or a wrong message.
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Using Claude Code? Ask it to run `/glance:report-issue`. It reads glance's logs and code, checks for duplicates, and fills in this form for you, and it shows you the draft before anything is posted.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and the exact text of any message glance showed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: The last line of `/glance-check` has the glance, Node, and system versions.
+      placeholder: |
+        glance: 0.2.0
+        Claude Code: 2.1.319
+        Node: 22.11.0
+        System: Windows 11
+        Terminal: Windows Terminal (no tmux)
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: /glance-check report
+      description: For painting problems, type `/glance-check` in the affected session and paste what it prints.
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Event log lines
+      description: |
+        The lines from `~/.claude/state/glance/events.log` around when it happened (about 20 lines is plenty). Read them before you paste: they name your tools and agents. Never paste `debug.jsonl`, which holds your prompts.
+      render: text
+  - type: textarea
+    id: cause
+    attributes:
+      label: Likely cause and workaround
+      description: Optional. What you think went wrong, with file and line in glance's source if you know them, and anything that fixed it (for example `/glance-fix`).

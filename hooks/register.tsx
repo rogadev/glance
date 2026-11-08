@@ -37,9 +37,11 @@ export function parsePane(stdout: string): Pane | null {
 
 const FIX = 'glance-fix'
 const CHECK = 'glance-check'
+const REPORT = 'glance-report'
 const LIVE: ReadonlySet<string> = new Set(['pending', 'running', 'waiting'])
 
-type Summary = { was?: string; dropped?: string[]; kept?: string[]; paint?: string }
+type Diagnosis = { verdict?: string; suspect?: boolean; cause?: string }
+type Summary = { was?: string; dropped?: string[]; kept?: string[]; paint?: string; diagnosis?: Diagnosis; snapshot?: string }
 
 /** glance.mjs's "attention [stop]" in the words the commands use: "needs you [stop]". */
 function plainState(state: string | undefined): string {
@@ -58,7 +60,28 @@ export function describe(stdout: string): string {
   lines.push(r.dropped?.length ? `Dropped: ${r.dropped.join(', ')}.` : 'Nothing stale to drop.')
   if (r.kept?.length) lines.push(`Kept (still running): ${r.kept.join(', ')}.`)
   if (r.paint !== 'ok') lines.push(`Painting failed (${r.paint}); see ~/.claude/state/glance/events.log.`)
+  if (r.diagnosis?.cause) lines.push('', r.diagnosis.cause)
+  if (r.diagnosis?.suspect) {
+    lines.push(`If the pane really was stuck, that's a glance bug. Run /${REPORT} to have Claude draft an issue for the glance maintainers; you see it before anything is filed.`)
+  }
   return lines.join('\n')
+}
+
+/** Gets the snapshot path from glance.mjs's /glance-fix summary, or '' when there is none. */
+export function snapshotOf(stdout: string): string {
+  try {
+    const r: Summary = JSON.parse(stdout.trim().split('\n').pop() || '')
+    return typeof r.snapshot === 'string' ? r.snapshot : ''
+  } catch {
+    return ''
+  }
+}
+
+/** Builds the prompt /glance-report hands Claude: run the report skill, on the last /glance-fix snapshot if any. */
+export function reportPrompt(snapshot: string): string {
+  const start = 'Use the glance:report-issue skill to help me report a problem with glance.'
+  if (!snapshot) return `${start} I haven't run /glance-fix in this session, so ask me what went wrong.`
+  return `${start} Start from the snapshot /glance-fix saved at ${snapshot}: it holds what glance found before it reset the pane, and this session's recent glance log lines.`
 }
 
 type Check = {
@@ -116,31 +139,82 @@ export function describeCheck(stdout: string): string {
 
 // The surface the prompt band last drew on, for /glance-check's report.
 let lastSurface = 'unknown'
+// Where the last /glance-fix saved its snapshot, for /glance-report.
+let lastSnapshot = ''
+// The prompt /glance-report queued, submitted at the next idle draw of the
+// prompt area.
+let pendingReport = ''
 
-// Set once glance.mjs can't be started (most often: no `node` on PATH), so
-// the warning shows once per load instead of on every event.
+/** Submits the prompt /glance-report queued. Not awaited: it is a turn of its own. */
+function submitReport($: EngineInterface) {
+  const text = pendingReport
+  pendingReport = ''
+  const refused = (why: string) => {
+    $.ui.log(`glance: /glance-report could not submit its prompt: ${why}`, { to: 'debug' })
+    $.ui.toast('glance could not start the report. Run /glance:report-issue to start it yourself.')
+  }
+  // A hook or the engine refusing the prompt resolves as { drop }; anything
+  // else that goes wrong rejects.
+  void $.prompt
+    .submit({ text })
+    .then((r) => {
+      if (r.drop !== undefined) refused(r.drop)
+    })
+    .catch((err: unknown) => refused(String(err)))
+}
+
+// Set once `node` can't be started, so the warning shows once per load
+// instead of on every event.
 let warned = false
+/** Builds the output a command shows when glance.mjs didn't run or didn't finish. */
+function couldNotRun(command: string, error: unknown): string {
+  if (cannotStart(error)) return `${command}: could not run glance.mjs. Is Node.js installed and on PATH?`
+  return `${command}: glance.mjs didn't finish in time (${String(error)}). Try again in a moment; claude --debug shows more.`
+}
 
-/** Runs glance.mjs with one event on stdin. Never throws. */
+/**
+ * Checks whether a `$.process.run` rejection means the command could not start (for
+ * `node`: not installed or not on PATH), as opposed to a run that timed out.
+ * The engine's rejection carries no code, only its message: "... failed to
+ * start: ENOENT: ..." or "... aborted: still running after 5000ms".
+ */
+export function cannotStart(err: unknown): boolean {
+  return /failed to start|ENOENT/.test(String(err))
+}
+
+/**
+ * Runs glance.mjs with one event on stdin. Never throws: a run that couldn't
+ * start or didn't finish comes back as `{ error }`, so a command can say which.
+ */
 async function glance($: EngineInterface, input: object) {
+  let r
   try {
-    const r = await $.process.run(['node', `${$.plugin.root}/glance.mjs`], {
+    r = await $.process.run(['node', `${$.plugin.root}/glance.mjs`], {
       stdin: JSON.stringify({ ...input, glance_via: 'mod' }),
       timeoutMs: 5000,
     })
-    if (r.exitCode !== 0) $.ui.log(`glance: exit ${r.exitCode}: ${r.stderr.slice(0, 200)}`, { to: 'debug' })
-    const next = parsePane(r.stdout)
-    if (next) await update($, pane, () => next)
-    else $.ui.log(`glance: no state line from glance.mjs: ${r.stdout.slice(0, 200)}`, { to: 'debug' })
-    return r
   } catch (err: unknown) {
+    // A slow run (a busy machine) is not a missing Node.js: the next event
+    // repaints, so it goes to the debug log only.
     $.ui.log(`glance: could not run glance.mjs: ${String(err)}`, { to: 'debug' })
-    if (!warned) {
+    if (cannotStart(err) && !warned) {
       warned = true
       $.ui.toast('glance could not start Node.js, so the pane tint is off. Install Node.js 20 or later and restart Claude.')
     }
-    return undefined
+    return { error: err }
   }
+  if (r.exitCode !== 0) $.ui.log(`glance: exit ${r.exitCode}: ${r.stderr.slice(0, 200)}`, { to: 'debug' })
+  const next = parsePane(r.stdout)
+  if (!next) {
+    $.ui.log(`glance: no state line from glance.mjs: ${r.stdout.slice(0, 200)}`, { to: 'debug' })
+    return r
+  }
+  try {
+    await update($, pane, () => next)
+  } catch (err: unknown) {
+    $.ui.log(`glance: could not save the pane state for the band: ${String(err)}`, { to: 'debug' })
+  }
+  return r
 }
 
 // The engine's isWorking as the prompt band last saw it, so only changes are
@@ -235,26 +309,41 @@ export const register: Register = (on) => {
       // Runs even while a turn is in flight, in case the stuck part is the turn.
       immediate: true,
     })
+    await $.command.register({
+      name: REPORT,
+      description: 'Have Claude research a glance problem (from the last /glance-fix, if any) and draft an issue for the glance maintainers',
+    })
     return next(e)
   })
 
   on('command.run', { command: CHECK }, async ($) => {
     const session_id = await $.session.id()
     const r = await runOwn($, { hook_event_name: 'GlanceCheck', session_id, surface: lastSurface })
-    if (!r) return { text: 'glance-check: could not run glance.mjs. Is Node.js installed and on PATH?' }
+    if ('error' in r) return { text: couldNotRun(CHECK, r.error) }
     if (r.exitCode !== 0) return { text: `glance-check: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     return { text: describeCheck(r.stdout) }
   }).catch((_$, _e, next) => ({ text: `glance-check failed: ${String(next.error)}` }))
 
   on('command.run', { command: FIX }, async ($) => {
+    // Cleared first, so a failed run can't leave /glance-report an older snapshot.
+    lastSnapshot = ''
     const session_id = await $.session.id()
     const agents = await $.agent.list()
     const live_agents = agents.filter((a) => LIVE.has(a.status)).map((a) => a.id)
     const r = await runOwn($, { hook_event_name: 'GlanceReset', session_id, live_agents })
-    if (!r) return { text: 'glance-fix: could not run glance.mjs. Is Node.js installed and on PATH?' }
+    if ('error' in r) return { text: couldNotRun(FIX, r.error) }
     if (r.exitCode !== 0) return { text: `glance-fix: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
+    lastSnapshot = snapshotOf(r.stdout)
     return { text: describe(r.stdout) }
   }).catch((_$, _e, next) => ({ text: `glance-fix failed: ${String(next.error)}` }))
+
+  on('command.run', { command: REPORT }, async () => {
+    // The engine refuses a prompt submitted from a command.run hook (it would
+    // wait on this command's own turn), and a command's turn sends no
+    // turn.complete, so the next idle draw of the prompt area submits it.
+    pendingReport = reportPrompt(lastSnapshot)
+    return { text: 'glance-report: asking Claude to research this and draft an issue for glance. It shows you the draft before anything is filed.' }
+  }).catch((_$, _e, next) => ({ text: `glance-report failed: ${String(next.error)}` }))
 
   /**
    * The desktop app's stand-in for the terminal tint: a full-width band in the
@@ -264,6 +353,8 @@ export const register: Register = (on) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Not awaited: drawing shouldn't wait on glance.mjs, which sleeps on UiIdle.
     void noteWorking($, e.props.isWorking)
+    // /glance-report's prompt, once its command is over and the engine is idle.
+    if (pendingReport && !e.props.isWorking) submitReport($)
     lastSurface = e.surface
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     const now = await read($, pane)

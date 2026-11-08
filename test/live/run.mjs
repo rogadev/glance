@@ -58,6 +58,15 @@ const SCENARIOS = {
       ['expect', /GlanceCheck -> attention \[session-start\] flash:ok restore:ok/, 20_000],
     ],
   },
+  'report': {
+    about: '/glance-report, after /glance-fix, submits its prompt once the command is done',
+    steps: [
+      ['say', '/glance-fix'],
+      ['until', /GlanceReset .*-> attention \[reset\]/, 20_000],
+      ['say', '/glance-report'],
+      ['expect', /UserPromptSubmit .*-> working/, 30_000],
+    ],
+  },
   'bash-mode': {
     about: 'a bash-mode command (! sleep 20), which sends no hook, shows working, then needs-you',
     steps: [
