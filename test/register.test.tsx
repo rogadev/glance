@@ -10,6 +10,7 @@ import {
   reportPrompt,
   runUpdateCheck,
   snapshotOf,
+  updateGlance,
   updateNotice,
 } from '../hooks/register'
 
@@ -624,4 +625,44 @@ test('a fetch that throws is logged, never thrown', async () => {
   await runUpdateCheck(io, ROOT)
   expect(seen.toasts.length).toBe(0)
   expect(seen.logs.some((l) => l.includes('update check failed: Error: offline'))).toBe(true)
+})
+
+// /glance-update. The CLI's --json failure line is the one `claude plugin
+// update` printed for a plugin it couldn't find (Claude Code 2.1.319).
+const NOT_FOUND_JSON = '{"command":"update","outcome":"failed","plugin":"glance@glance","message":"Plugin \\"glance\\" not found","failureCode":"not_found"}'
+
+test('/glance-update runs claude plugin update for the marketplace glance came from', async () => {
+  const runs: string[][] = []
+  const text = await updateGlance(async (argv) => {
+    runs.push(argv)
+    return { exitCode: 0, stdout: '{"command":"update","outcome":"updated","message":"Updated glance to 0.3.0"}\n', stderr: '' }
+  }, ROOT)
+  expect(runs).toEqual([['claude', 'plugin', 'update', 'glance@glance', '--json']])
+  expect(text).toContain('Updated glance to 0.3.0')
+  expect(text).toContain('/reload-plugins')
+})
+
+test('/glance-update says what failed and how to update by hand', async () => {
+  const text = await updateGlance(async () => ({ exitCode: 1, stdout: NOT_FOUND_JSON + '\n', stderr: '' }), ROOT)
+  expect(text).toContain('Plugin "glance" not found')
+  expect(text).toContain('claude plugin update glance@glance')
+  expect(text).not.toContain('/reload-plugins')
+})
+
+test('/glance-update that cannot run the CLI says how to update by hand', async () => {
+  const text = await updateGlance(async () => {
+    throw new Error("failed to start: ENOENT: Command 'claude' not found")
+  }, ROOT)
+  expect(text).toContain("couldn't run the update")
+  expect(text).toContain('claude plugin update glance@glance')
+})
+
+test('/glance-update on a glance run from its own folder runs nothing and says to update the folder', async ($, on) => {
+  const runs: unknown[] = []
+  on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout: '', stderr: '' } }))
+  on('command.run', () => ({ text: 'engine ran it' }))
+  const r = await $.command.run({ command: 'glance-update' })
+  expect(runs.length).toBe(0)
+  expect(r.text).toContain('not a marketplace install')
+  expect(r.text).toContain('git pull')
 })

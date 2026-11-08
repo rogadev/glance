@@ -352,6 +352,38 @@ export async function runUpdateCheck(io: UpdateIO, root: string): Promise<void> 
   }
 }
 
+/** What `/glance-update` needs from a finished `claude plugin update --json` run. */
+type Ran = { exitCode: number; stdout: string; stderr: string }
+
+/**
+ * Updates glance with `claude plugin update` and says what happened, or says
+ * how to update a glance that runs from a folder of its own. Never throws.
+ */
+export async function updateGlance(run: (argv: string[]) => Promise<Ran>, root: string): Promise<string> {
+  const marketplace = marketplaceOf(root)
+  if (!marketplace) {
+    return `${UPDATE}: glance runs from ${root}, not a marketplace install, so update that folder (for example, git pull), then run /reload-plugins.`
+  }
+  const id = `glance@${marketplace}`
+  const byHand = `Run \`claude plugin update ${id}\` in a terminal, or update glance under /plugin, Installed.`
+  let r: Ran
+  try {
+    r = await run(['claude', 'plugin', 'update', id, '--json'])
+  } catch (err: unknown) {
+    return `${UPDATE}: couldn't run the update (${String(err)}). ${byHand}`
+  }
+  // --json prints one result line: { outcome, message, ... }.
+  let message = ''
+  try {
+    const result = JSON.parse(r.stdout.trim().split('\n').pop() || '')
+    if (typeof result.message === 'string') message = result.message
+  } catch {
+    message = r.stderr.trim().slice(0, 200)
+  }
+  if (r.exitCode !== 0) return `${UPDATE}: the update failed${message ? ` (${message})` : ''}. ${byHand}`
+  return `${UPDATE}: ${message || 'glance is updated'}. Run /reload-plugins to start using it.`
+}
+
 /** Runs the update check on the engine. Not awaited by its caller. */
 function checkForUpdate($: EngineInterface, root: string) {
   return runUpdateCheck(
@@ -428,6 +460,10 @@ export const register: Register = (on) => {
       name: REPORT,
       description: 'Have Claude research a glance problem (from the last /glance-fix, if any) and draft an issue for the glance maintainers',
     })
+    await $.command.register({
+      name: UPDATE,
+      description: 'Update glance to the latest release (then run /reload-plugins)',
+    })
     // Not awaited: the check must never hold up the session.
     if (e.isInteractive) void checkForUpdate($, $.plugin.root)
     return next(e)
@@ -453,6 +489,11 @@ export const register: Register = (on) => {
     lastSnapshot = snapshotOf(r.stdout)
     return { text: describe(r.stdout) }
   }).catch((_$, _e, next) => ({ text: `glance-fix failed: ${String(next.error)}` }))
+
+  on('command.run', { command: UPDATE }, async ($) => {
+    const run = (argv: string[]) => $.process.run(argv, { timeoutMs: 120_000 })
+    return { text: await updateGlance(run, $.plugin.root) }
+  }).catch((_$, _e, next) => ({ text: `${UPDATE} failed: ${String(next.error)}` }))
 
   on('command.run', { command: REPORT }, async () => {
     // The engine refuses a prompt submitted from a command.run hook (it would
