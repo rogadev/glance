@@ -22,7 +22,7 @@ This is a project profile for orc-pack's `orc-review` skill. Invoke the `orc-rev
 | Check     | Command                                                                                          | When                                                                         |
 | --------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | install   | none (no dependencies)                                                                           | worktree                                                                     |
-| test      | `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs` | always                                                                       |
+| test      | `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs test/release.test.mjs` | always                                                                       |
 | mod tests | `claude plugin test .`                                                                           | always                                                                       |
 | validate  | `claude plugin validate .`                                                                       | always                                                                       |
 | typecheck | `npx -y -p typescript@5.6.3 tsc -p . --noEmit`                                                   | the range ends at `HEAD` (it needs `.claude-plugin/types/`, which the engine writes and git ignores, so it can't run in a worktree) |
@@ -49,7 +49,7 @@ This is a project profile for orc-pack's `orc-review` skill. Invoke the `orc-rev
 | Data             | None: no database. Per-session state files under `~/.claude/state/glance/` are Logic.                                                                                                   |             |
 | UI               | None as files: the Claude Desktop band and the command output text live in `hooks/register.tsx` and are classified by hunk.                                                             |             |
 | Tests            | `test/**`                                                                                                                                                                               |             |
-| Config and infra | `.github/workflows/*.yml`, `.github/dependabot.yml`, `.claude-plugin/*.json`, `hooks/hooks.json`, `release-please-config.json`, `.release-please-manifest.json`, `tsconfig.json`, `.gitattributes`, `build.ps1`, `types/index.d.ts` |             |
+| Config and infra | `.github/workflows/*.yml`, `.github/dependabot.yml`, `.claude-plugin/*.json`, `hooks/hooks.json`, `.github/scripts/release.mjs`, `tsconfig.json`, `.gitattributes`, `build.ps1`, `types/index.d.ts` |             |
 
 ## Repo lanes
 
@@ -69,7 +69,7 @@ Paths left out of the diff the reviewers read: `paint.exe` (a committed binary; 
 - `hooks/register.tsx` (the mod) only forwards events to `glance.mjs` through `$.process.run` and draws the Desktop band from the state line `glance.mjs` prints. It holds no rules of its own beyond what to forward and when (the `isWorking` settle wait, ignoring its own commands).
 - Painting: `paint.exe` (from `paint.cs`) on Windows, the tty painter in `glance.mjs` on macOS and Linux. `paint.exe` is committed and rebuilt only with `build.ps1`.
 - `test/live/` drives real interactive sessions on Windows and is never part of CI.
-- Release flow: work lands on `dev`, `main` takes pull requests from `dev` only, Release Please versions from conventional commits. Commit subjects decide the version, so a mislabeled `feat:` or `fix:` is a real defect.
+- Release flow: work lands on `dev`, `main` takes pull requests from `dev` only, CI's `version` job versions from conventional commits on the `dev` to `main` pull request, and the merge publishes the release. Commit subjects decide the version, so a mislabeled `feat:` or `fix:` is a real defect.
 
 ## Intentional non-issues
 

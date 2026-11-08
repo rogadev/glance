@@ -1,12 +1,16 @@
 name: Release
 
-# Runs when a change reaches main. Release Please reads the conventional
-# commits (feat:, fix:, and so on) since the last release and keeps a release
-# pull request open with the version bump and CHANGELOG.md. Merging that pull
-# request tags the version and publishes the GitHub release.
+# Runs when a change reaches main. The version bump and its CHANGELOG.md
+# section were already merged: CI's version job commits them to dev on the
+# dev-to-main pull request (.github/scripts/release.mjs). This job publishes
+# the GitHub release for that version, tagged vX.Y.Z on the commit that
+# reached main. A merge that bumps nothing finds its tag already there and
+# publishes nothing.
 on:
   push:
     branches: [main]
+  # To publish again after a failed run. Only main publishes.
+  workflow_dispatch:
 
 # Each job asks for only what it needs.
 permissions: {}
@@ -16,52 +20,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-please:
+  release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # release commits, tags, and releases
-      pull-requests: write # the release pull request
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      # GitHub holds CI on a pull request the built-in token opened until a
-      # maintainer approves it. A pull request the release app opens runs CI
-      # like any other, so the release pull request only needs the merge.
-      # Without the app's client ID (a repository variable), Release Please
-      # falls back to the built-in token and the approval is needed again.
-      # Pinned to a commit: this action mints a token with write access.
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        if: vars.RELEASE_APP_CLIENT_ID != ''
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-      # Pinned to a commit: this action holds write access. Dependabot bumps it.
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        id: release
-        with:
-          token: ${{ steps.app-token.outputs.token || github.token }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          target-branch: main
-
-  sync-dev:
-    # The release commit (version bump, CHANGELOG.md) lands on main only.
-    # Bring it back to dev so the next dev-to-main pull request starts level.
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # pushing the merge to dev
+      contents: write # tags and releases
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          ref: dev
-          fetch-depth: 0
-      - name: Merge main into dev
+          node-version: 22
+      - name: Publish the release for plugin.json's version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git merge --no-edit origin/main
-          git push origin dev
+          set -euo pipefail
+          VERSION=$(node -p "require('./.claude-plugin/plugin.json').version")
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::plugin.json's version '$VERSION' is not an x.y.z version."
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "$TAG is already released; nothing to publish."
+            exit 0
+          fi
+          node .github/scripts/release.mjs notes "$VERSION" > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          echo "Published $TAG."

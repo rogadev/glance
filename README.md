@@ -174,25 +174,25 @@ Events from inside a subagent never cover up a question the main thread is waiti
 
 ## Contributing
 
-Work happens on `dev`. `main` only takes pull requests from `dev` (a CI check enforces it), and every change that reaches `main` goes through Release Please, which turns conventional commit messages into the next version, `CHANGELOG.md`, and a GitHub release.
+Work happens on `dev`. `main` only takes pull requests from `dev` (a CI check enforces it). There's no release pull request: merging a `dev` pull request into `main` publishes the release itself. Conventional commit messages decide the next version.
 
-1. Commit to `dev`, or branch from it. Write commit messages as conventional commits: `feat:` for new behavior (minor version), `fix:` for a bug fix (patch), and `docs:`, `test:`, `ci:`, or `chore:` for the rest (no release on their own). Mark a breaking change with `!`, for example `feat!:`.
+1. Commit to `dev`, or branch from it. Write commit messages as conventional commits: `feat:` for new behavior (minor version), `fix:` or `perf:` for a bug fix (patch), and `docs:`, `test:`, `ci:`, `refactor:`, or `chore:` for the rest (no release on their own). Mark a breaking change with `!`, for example `feat!:`, or a `BREAKING CHANGE:` footer: it bumps the major version, or the minor one before 1.0.0.
 2. Before you push, run what CI runs:
-   - `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs`
+   - `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs test/release.test.mjs`
    - `claude plugin validate .` and `claude plugin test .`
    - On Windows, `pwsh -File build.ps1 -Check`. After editing `paint.cs`, run `pwsh -File build.ps1` and commit the new `paint.exe`.
    - The mod's type-check, `npx -p typescript tsc -p .`, needs the types the engine writes to `.claude-plugin/types/` when it loads the mod, so it runs locally, not in CI.
-3. Open a pull request from `dev` to `main` and merge it with a merge commit. Squashing would make `dev` and `main` drift apart.
-4. Release Please opens or updates a release pull request on `main`, and CI runs on it. Wait for `ci ok`, then merge it when you want to ship: that tags `vX.Y.Z`, publishes the GitHub release, and merges the release commit back into `dev`.
+3. Open a pull request from `dev` to `main`. CI's `version` job reads the commits since `main`, works out the next version, and commits `chore: release X.Y.Z` to `dev`: the version in `.claude-plugin/plugin.json` and a section at the top of `CHANGELOG.md` (`.github/scripts/release.mjs`). Pull `dev` before you commit again. If more commits land on `dev` while the pull request is open, the job updates that commit's version and section. With only `docs:`, `test:`, and similar commits, it commits nothing.
+4. Wait for `ci ok` on the new head, then merge with a merge commit (squashing would make `dev` and `main` drift apart). The release workflow (`.github/workflows/release.yml`) then tags `vX.Y.Z` on `main` and publishes the GitHub release with that changelog section. A merge that bumped nothing publishes nothing.
 
-Release Please acts as a GitHub App, so CI runs on its pull request without approval. GitHub holds CI on a pull request the workflow's built-in token opens until a maintainer approves it. To set the app up (once, in a fork or a new copy of the repo):
+The `version` job pushes to `dev` as a GitHub App, so CI runs on the new head of the pull request. A push made with the workflow's built-in token starts no workflows. To set the app up (once, in a fork or a new copy of the repo):
 
-1. Create a GitHub App (**Settings**, **Developer settings**, **GitHub Apps**, **New GitHub App**) with no webhook, and the repository permissions **Contents: Read and write** and **Pull requests: Read and write**. Install it on the repository.
+1. Create a GitHub App (**Settings**, **Developer settings**, **GitHub Apps**, **New GitHub App**) with no webhook, and the repository permission **Contents: Read and write**. Install it on the repository.
 2. In the repository's **Settings**, **Secrets and variables**, **Actions**: add the app's client ID as the variable `RELEASE_APP_CLIENT_ID`, and a private key you generate for it as the secret `RELEASE_APP_PRIVATE_KEY`.
 
-Without the variable, the release workflow falls back to the built-in token. CI on the release pull request then waits for approval: click **Approve and run** on the pull request (or `gh api -X POST repos/rogadev/glance/actions/runs/<run id>/approve`).
+Without the variable, the `version` job pushes with the built-in token, and CI doesn't run on the new head. Run it by hand from the **Actions** tab (**CI**, **Run workflow** on `dev`), or push another commit with your own account.
 
-CI (`.github/workflows/ci.yml`) runs the Node tests on Windows, macOS, and Linux with Node 20 and 22, including `test/terminal.test.mjs`, which paints for real: into a pseudo-terminal on macOS and Linux (checking the exact bytes the terminal receives, through both `/dev/tty` and the ancestor fallback) and into a hidden console of its own on Windows; validates and tests the plugin; rebuilds `paint.exe` from `paint.cs` and checks that the committed `paint.exe` was built from that source (`paint.exe --source-hash`); checks `paint.exe`'s exit codes; and reports one `ci ok` check, which the branch rules require.
+CI (`.github/workflows/ci.yml`) runs the Node tests on Windows, macOS, and Linux with Node 20 and 22, including `test/terminal.test.mjs`, which paints for real: into a pseudo-terminal on macOS and Linux (checking the exact bytes the terminal receives, through both `/dev/tty` and the ancestor fallback) and into a hidden console of its own on Windows; validates and tests the plugin; rebuilds `paint.exe` from `paint.cs` and checks that the committed `paint.exe` was built from that source (`paint.exe --source-hash`); checks `paint.exe`'s exit codes; on the `dev` to `main` pull request, commits the next version (the `version` job); and reports one `ci ok` check, which the branch rules require.
 
 ### Testing
 
@@ -203,6 +203,7 @@ Each layer has its own test, from the rules out to the screen:
 | Rules | The wrong state for a sequence of events | `test/glance.test.mjs`, `test/schedule.test.mjs` | CI, every system |
 | Script end to end | State file, log, and `/glance-fix` output | `test/smoke.test.mjs` | CI, every system |
 | Painters | The color code not reaching a terminal | `test/terminal.test.mjs` | CI, every system |
+| Releases | The wrong next version, or a changelog section lost or doubled | `test/release.test.mjs` | CI, every system |
 | Mod | An event not forwarded, the Desktop band, `isWorking` reporting | `test/register.test.tsx` (`claude plugin test .`) | CI |
 | What Claude Code sends | Keys and commands whose events nobody knows yet | `test/live/run.mjs` | Locally, on Windows |
 | What a terminal shows | A terminal that ignores the color code | You, looking at the pane | By hand |

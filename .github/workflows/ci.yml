@@ -21,7 +21,7 @@ jobs:
     name: source branch
     runs-on: ubuntu-latest
     steps:
-      - name: Only dev, or a Release Please branch, merges into main
+      - name: Only dev merges into main
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.base_ref }}
@@ -38,7 +38,7 @@ jobs:
             exit 1
           fi
           case "$HEAD" in
-            dev|release-please--*) echo "OK: $HEAD into main." ;;
+            dev) echo "OK: $HEAD into main." ;;
             *) echo "::error::Pull requests into main must come from dev (this one is from $HEAD). Open it against dev instead."; exit 1 ;;
           esac
 
@@ -56,11 +56,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Syntax check
-        run: node --check glance.mjs && node --check schedule.mjs
+        run: node --check glance.mjs && node --check schedule.mjs && node --check .github/scripts/release.mjs
       - name: Unit, smoke, and terminal tests
         # terminal.test.mjs paints for real: into a pseudo-terminal on macOS and
         # Linux, and into a hidden console of its own on Windows.
-        run: node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs
+        run: node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs test/release.test.mjs
 
   plugin:
     name: plugin validate and test
@@ -98,17 +98,74 @@ jobs:
           Expect 3 @('111')        # no claude.exe ancestor on a CI runner
           Expect 0 @('--utc-offset')
 
+  version:
+    # On the dev-to-main pull request only: works out the next version from the
+    # conventional commits since main and commits it to dev with its
+    # CHANGELOG.md section, so the bump is part of the merge. ci ok waits on
+    # this job, so the pull request can't merge before the bump lands; the push
+    # starts CI again on the new head. Release (release.yml) publishes on main.
+    name: version
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the release commit on dev
+    steps:
+      # A push with the built-in token starts no workflows, so CI would never
+      # run on the new head. A push the release app makes starts CI like any
+      # other. Without the app's client ID (a repository variable), the job
+      # falls back to the built-in token, and CI must be run by hand (README).
+      # Pinned to a commit: this action mints a token with write access.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        if: vars.RELEASE_APP_CLIENT_ID != ''
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || github.token }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Write the next version and its changelog section
+        run: node .github/scripts/release.mjs prepare origin/main
+      - name: Commit the release to dev
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Version and changelog are up to date; nothing to commit."
+            exit 0
+          fi
+          # The head is already this job's own commit, so a second change means
+          # the script doesn't settle; pushing again would loop.
+          if git log -1 --format=%s | grep -Eq '^chore: release [0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::The release commit on dev still needs changes. Run 'node .github/scripts/release.mjs prepare origin/main' locally and look at the diff."
+            exit 1
+          fi
+          VERSION=$(node -p "require('./.claude-plugin/plugin.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release $VERSION"
+          git push origin HEAD:dev
+
   ci-ok:
     # The one check the branch rules require, so adding a job here doesn't
     # mean editing the rules.
     name: ci ok
     if: always()
-    needs: [source-branch, node, plugin, paint]
+    needs: [source-branch, node, plugin, paint, version]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "Results: $RESULTS"
-          for r in $RESULTS; do [ "$r" = success ] || { echo "::error::A required job did not pass."; exit 1; }; done
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          # version runs only on the dev-to-main pull request, so it alone may be skipped.
+          echo "$NEEDS" | jq -e 'to_entries | all(.value.result == "success" or (.key == "version" and .value.result == "skipped"))' > /dev/null ||
+            { echo "::error::A required job did not pass."; exit 1; }
