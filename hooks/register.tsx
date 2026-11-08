@@ -252,10 +252,10 @@ async function noteWorking($: EngineInterface, working: boolean) {
 }
 
 /** Runs one of glance's own commands, with isWorking reports held off while it runs. */
-async function runOwn($: EngineInterface, input: object) {
+async function runOwn<T>(work: () => Promise<T>): Promise<T> {
   ownCommands++
   try {
-    return await glance($, input)
+    return await work()
   } finally {
     ownCommands--
   }
@@ -471,7 +471,7 @@ export const register: Register = (on) => {
 
   on('command.run', { command: CHECK }, async ($) => {
     const session_id = await $.session.id()
-    const r = await runOwn($, { hook_event_name: 'GlanceCheck', session_id, surface: lastSurface })
+    const r = await runOwn(() => glance($, { hook_event_name: 'GlanceCheck', session_id, surface: lastSurface }))
     if ('error' in r) return { text: couldNotRun(CHECK, r.error) }
     if (r.exitCode !== 0) return { text: `glance-check: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     return { text: describeCheck(r.stdout) }
@@ -483,7 +483,7 @@ export const register: Register = (on) => {
     const session_id = await $.session.id()
     const agents = await $.agent.list()
     const live_agents = agents.filter((a) => LIVE.has(a.status)).map((a) => a.id)
-    const r = await runOwn($, { hook_event_name: 'GlanceReset', session_id, live_agents })
+    const r = await runOwn(() => glance($, { hook_event_name: 'GlanceReset', session_id, live_agents }))
     if ('error' in r) return { text: couldNotRun(FIX, r.error) }
     if (r.exitCode !== 0) return { text: `glance-fix: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     lastSnapshot = snapshotOf(r.stdout)
@@ -492,7 +492,8 @@ export const register: Register = (on) => {
 
   on('command.run', { command: UPDATE }, async ($) => {
     const run = (argv: string[]) => $.process.run(argv, { timeoutMs: 120_000 })
-    return { text: await updateGlance(run, $.plugin.root) }
+    // claude plugin update can take a while, and isWorking is true the whole time.
+    return { text: await runOwn(() => updateGlance(run, $.plugin.root)) }
   }).catch((_$, _e, next) => ({ text: `${UPDATE} failed: ${String(next.error)}` }))
 
   on('command.run', { command: REPORT }, async () => {
