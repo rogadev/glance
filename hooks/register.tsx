@@ -166,14 +166,10 @@ function submitReport($: EngineInterface) {
 // Set once `node` can't be started, so the warning shows once per load
 // instead of on every event.
 let warned = false
-// Why the last run of glance.mjs failed, so a command can tell a missing
-// Node.js from a run that took too long.
-let lastRunError: unknown
-
 /** Builds the output a command shows when glance.mjs didn't run or didn't finish. */
-function couldNotRun(command: string): string {
-  if (cannotStart(lastRunError)) return `${command}: could not run glance.mjs. Is Node.js installed and on PATH?`
-  return `${command}: glance.mjs didn't finish in time (${String(lastRunError)}). Try again in a moment; claude --debug shows more.`
+function couldNotRun(command: string, error: unknown): string {
+  if (cannotStart(error)) return `${command}: could not run glance.mjs. Is Node.js installed and on PATH?`
+  return `${command}: glance.mjs didn't finish in time (${String(error)}). Try again in a moment; claude --debug shows more.`
 }
 
 /**
@@ -186,7 +182,10 @@ export function cannotStart(err: unknown): boolean {
   return /failed to start|ENOENT/.test(String(err))
 }
 
-/** Runs glance.mjs with one event on stdin. Never throws. */
+/**
+ * Runs glance.mjs with one event on stdin. Never throws: a run that couldn't
+ * start or didn't finish comes back as `{ error }`, so a command can say which.
+ */
 async function glance($: EngineInterface, input: object) {
   let r
   try {
@@ -198,12 +197,11 @@ async function glance($: EngineInterface, input: object) {
     // A slow run (a busy machine) is not a missing Node.js: the next event
     // repaints, so it goes to the debug log only.
     $.ui.log(`glance: could not run glance.mjs: ${String(err)}`, { to: 'debug' })
-    lastRunError = err
     if (cannotStart(err) && !warned) {
       warned = true
       $.ui.toast('glance could not start Node.js, so the pane tint is off. Install Node.js 20 or later and restart Claude.')
     }
-    return undefined
+    return { error: err }
   }
   if (r.exitCode !== 0) $.ui.log(`glance: exit ${r.exitCode}: ${r.stderr.slice(0, 200)}`, { to: 'debug' })
   const next = parsePane(r.stdout)
@@ -321,7 +319,7 @@ export const register: Register = (on) => {
   on('command.run', { command: CHECK }, async ($) => {
     const session_id = await $.session.id()
     const r = await runOwn($, { hook_event_name: 'GlanceCheck', session_id, surface: lastSurface })
-    if (!r) return { text: couldNotRun(CHECK) }
+    if ('error' in r) return { text: couldNotRun(CHECK, r.error) }
     if (r.exitCode !== 0) return { text: `glance-check: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     return { text: describeCheck(r.stdout) }
   }).catch((_$, _e, next) => ({ text: `glance-check failed: ${String(next.error)}` }))
@@ -333,7 +331,7 @@ export const register: Register = (on) => {
     const agents = await $.agent.list()
     const live_agents = agents.filter((a) => LIVE.has(a.status)).map((a) => a.id)
     const r = await runOwn($, { hook_event_name: 'GlanceReset', session_id, live_agents })
-    if (!r) return { text: couldNotRun(FIX) }
+    if ('error' in r) return { text: couldNotRun(FIX, r.error) }
     if (r.exitCode !== 0) return { text: `glance-fix: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
     lastSnapshot = snapshotOf(r.stdout)
     return { text: describe(r.stdout) }

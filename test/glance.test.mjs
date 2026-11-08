@@ -332,6 +332,15 @@ test('/glance-fix reports a missed agent end ahead of a stale shell', () => {
   assert.equal(d.suspect, true);
 });
 
+test('/glance-fix rounds a shell age to the nearest minute, and says when it is under one', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('dev'), main('Stop')]);
+  // Measured from when the shell started, not from the Stop after it.
+  const started = Object.values(s.background).find((b) => b.kind === 'shell').at;
+  const at = (ms) => diagnoseReset(s, main('GlanceReset', { live_agents: [] }), started + ms).cause;
+  assert.match(at(90 * 1000), /started 2 min ago/);
+  assert.match(at(29 * 1000), /started under a minute ago/);
+});
+
 test('/glance-fix reports a stale shell ahead of an agent that is still running', () => {
   const s = run([main('UserPromptSubmit'), bgShell('dev'), sub('SubagentStart', 'alive'), main('Stop')]);
   const d = diagnoseReset(s, main('GlanceReset', { live_agents: ['alive'] }), s.updatedAt + MIN);

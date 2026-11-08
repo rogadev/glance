@@ -396,6 +396,29 @@ test('a refused /glance-report prompt is logged, told to the user, and not retri
   expect(JSON.stringify(toasts[0])).toContain('/glance:report-issue')
 })
 
+test('a /glance-report prompt the engine rejects is logged and told to the user too', async ($, on) => {
+  const logs: string[] = []
+  const toasts: unknown[] = []
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }) as never)
+  // No prompt.submit hook: with nothing to answer it, $.prompt.submit rejects.
+  on('ui.log', (_, e) => (logs.push(e.text), { value: undefined }) as never)
+  on('ui.toast', (_, e) => (toasts.push(e), { value: undefined }) as never)
+  on('command.run', () => ({ text: 'engine ran it' }))
+  await $.command.run({ command: 'glance-report' })
+  const idle = () => $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking: false } })
+  await idle()
+  await idle()
+  await new Promise((res) => setTimeout(res, 0))
+  expect(logs.filter((l) => l.includes('could not submit its prompt')).length).toBe(1)
+  expect(toasts.length).toBe(1)
+  expect(JSON.stringify(toasts[0])).toContain('/glance:report-issue')
+})
+
 test('a timeout does not use up the missing-Node.js notice', async ($, on) => {
   const toasts: unknown[] = []
   let calls = 0
