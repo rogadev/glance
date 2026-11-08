@@ -690,3 +690,47 @@ test('/glance-update on a glance run from its own folder runs nothing and says t
   expect(r.text).toContain('not a marketplace install')
   expect(r.text).toContain('git pull')
 })
+
+// session.start: in the test engine $.plugin.root is this folder, not a
+// marketplace install, so the update check stops at that and logs why.
+function sessionEngine(on: Parameters<Parameters<typeof test>[1]>[1], env: (name: string) => Promise<string | undefined>) {
+  const seen = { commands: [] as string[], envs: [] as string[], logs: [] as string[] }
+  on('command.register', (_, e) => (seen.commands.push(e.name), { value: undefined }) as never)
+  on('env.get', (_, e) => (seen.envs.push(e.name), env(e.name).then((value) => ({ value }))) as never)
+  on('ui.log', (_, e) => (seen.logs.push(String(e.text)), { value: undefined }) as never)
+  on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+  return seen
+}
+
+const START = { cwd: '/home/u/project', surface: 'terminal', isInteractive: true } as const
+
+test('an interactive session registers /glance-update and starts the update check', async ($, on) => {
+  const seen = sessionEngine(on, async () => undefined)
+  await $.session.start(START)
+  await new Promise((r) => setTimeout(r, 0))
+  expect(seen.commands).toContain('glance-update')
+  expect(seen.envs).toEqual(['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'DISABLE_AUTOUPDATER', 'DISABLE_UPDATES'])
+  expect(seen.logs.some((l) => l.includes('not a marketplace install'))).toBe(true)
+})
+
+test('each update or network setting reaches the check by its own name', async ($, on) => {
+  const seen = sessionEngine(on, async (name) => (name === 'DISABLE_UPDATES' ? '1' : undefined))
+  await $.session.start(START)
+  await new Promise((r) => setTimeout(r, 0))
+  expect(seen.logs.some((l) => l.includes('update check off (an update or network setting'))).toBe(true)
+})
+
+test('session start never waits on the update check', async ($, on) => {
+  const seen = sessionEngine(on, () => new Promise(() => {}))
+  await $.session.start(START)
+  expect(seen.commands).toContain('glance-update')
+  expect(seen.envs.length).toBe(1)
+})
+
+test('a session nobody is at (claude -p, the SDK) starts no update check', async ($, on) => {
+  const seen = sessionEngine(on, async () => undefined)
+  await $.session.start({ ...START, surface: null, isInteractive: false })
+  await new Promise((r) => setTimeout(r, 0))
+  expect(seen.commands).toContain('glance-update')
+  expect(seen.envs).toEqual([])
+})
