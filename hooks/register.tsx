@@ -261,8 +261,9 @@ async function runOwn<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-// Update check. Claude Code auto-updates plugins from a third-party
-// marketplace only when the user turns that on, so glance looks for a newer
+// Update check. Claude Code's docs say it auto-updates plugins from a
+// third-party marketplace only when the user turns that on (not yet verified
+// here; see the README's open questions), so glance looks for a newer
 // release itself, at most once a day across all windows, and says so in a
 // toast at the start of each session while it is behind.
 

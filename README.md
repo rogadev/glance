@@ -33,7 +33,7 @@ Sessions you start after the install are tinted.
 
 ## Stay up to date: `/glance-update`
 
-Claude Code updates plugins on its own only for marketplaces that have auto-update turned on, and it's off by default for a marketplace like glance's. To turn it on: run `/plugin`, open **Marketplaces**, select **glance**, then **Enable auto-update**. Claude Code then updates glance shortly after the first message of a session and tells you to run `/reload-plugins`.
+Claude Code's docs say it updates plugins on its own only for marketplaces that have auto-update turned on, and that it's off by default for a third-party marketplace like glance's. To turn it on: run `/plugin`, open **Marketplaces**, select **glance**, then **Enable auto-update**. Per the same docs, Claude Code then updates glance shortly after the first message of a session and tells you to run `/reload-plugins`. glance hasn't tested this itself yet (see "Open questions").
 
 Without auto-update, glance tells you itself. At the start of a session it checks whether a newer release is out, at most once a day across all your windows, and while yours is behind, each new session shows a notice naming both versions. Run `/glance-update` to update (it runs `claude plugin update` for you), then `/reload-plugins`.
 
@@ -163,6 +163,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 ## Open questions
 
 - The update notice is a toast raised about three seconds after a session starts. No one has seen it on screen yet in a marketplace install, in the terminal or the desktop app.
+- Marketplace auto-update is described above from Claude Code's docs, not by experiment: whether it's off by default for glance's marketplace, and when an update lands once it's on.
 - A schedule due more than an hour out shows needs-you until something else fires a hook (there's no timer to re-tint the pane as the run approaches).
 - The cron offset is taken once, when the job is created, so a recurring cron that crosses a daylight-saving change is off by an hour until it's recreated (jobs expire after 7 days anyway).
 - A background dev server left running holds the tint for up to an hour after the turn ends (the shell TTL), unless you run `/glance-fix`.
