@@ -1,6 +1,6 @@
 {
   "name": "glance",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Tints your terminal pane while Claude is working, so you can tell from across the room which sessions need you. Includes /glance-fix for a stuck tint.",
   "author": {
     "name": "Ryan Roga",
