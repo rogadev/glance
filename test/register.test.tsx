@@ -771,3 +771,14 @@ test('a session nobody is at (claude -p, the SDK) starts no update check', async
   expect(seen.commands).toContain('glance-update')
   expect(seen.envs).toEqual([])
 })
+
+test('a command that fails to register never holds up or fails session start', async ($, on) => {
+  const starts: unknown[] = []
+  on('command.register', () => {
+    throw new Error('registry closed')
+  })
+  on('session.start', (_, e) => (starts.push(e), { cwd: e.cwd }) as never)
+  const r = await $.session.start(START)
+  expect(r.cwd).toBe(START.cwd)
+  expect(starts.length).toBe(1)
+})

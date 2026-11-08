@@ -491,7 +491,7 @@ export const register: Register = (on) => {
     // Not awaited: the check must never hold up the session.
     if (e.isInteractive) void checkForUpdate($, $.plugin.root)
     return next(e)
-  })
+  }).catch(failOpen)
 
   on('command.run', { command: CHECK }, async ($) => {
     const session_id = await $.session.id()
