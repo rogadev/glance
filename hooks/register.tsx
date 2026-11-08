@@ -281,11 +281,17 @@ type UpdateCheck = { checkedAt?: number; latest?: string }
  * never shows a notice.
  */
 export function isNewer(latest: string, installed: string): boolean {
-  const parse = (v: string) => (/^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : null)
+  const parse = (v: string) => {
+    const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v)
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+  }
   const a = parse(latest)
   const b = parse(installed)
   if (!a || !b) return false
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! > b[i]!
+  for (const [i, n] of a.entries()) {
+    const m = b[i]
+    if (m !== undefined && n !== m) return n > m
+  }
   return false
 }
 
@@ -299,9 +305,26 @@ export function marketplaceOf(root: string): string {
   return m?.[1] ?? ''
 }
 
-/** Checks whether the last update check is old enough to fetch again. */
+/**
+ * Checks whether the last update check is old enough to fetch again. A check
+ * dated in the future (the clock was set back) counts as due, so a wrong clock
+ * can't hold off every check until it catches up.
+ */
 export function checkDue(check: UpdateCheck, now: number): boolean {
-  return typeof check.checkedAt !== 'number' || now - check.checkedAt >= CHECK_EVERY_MS
+  if (typeof check.checkedAt !== 'number') return true
+  const age = now - check.checkedAt
+  return age < 0 || age >= CHECK_EVERY_MS
+}
+
+/** Reads a stored update check, keeping only the fields of the right type. */
+export function asUpdateCheck(stored: unknown): UpdateCheck {
+  if (typeof stored !== 'object' || stored === null) return {}
+  // A non-null object, checked above; each field is checked below.
+  const { checkedAt, latest } = stored as Record<string, unknown>
+  return {
+    ...(typeof checkedAt === 'number' ? { checkedAt } : {}),
+    ...(typeof latest === 'string' ? { latest } : {}),
+  }
 }
 
 /** Builds the toast that says a newer glance is out. */
@@ -334,7 +357,7 @@ export async function runUpdateCheck(io: UpdateIO, root: string): Promise<void> 
     if (!marketplaceOf(root)) return io.log(`glance: update check off (runs from ${root}, not a marketplace install)`)
     const installed = JSON.parse(await io.readFile(`${root}/.claude-plugin/plugin.json`)).version
     if (typeof installed !== 'string') return io.log('glance: update check found no version in its own plugin.json')
-    let check = ((await io.load()) ?? {}) as UpdateCheck
+    let check = asUpdateCheck(await io.load())
     const now = await io.now()
     if (checkDue(check, now)) {
       const r = await io.fetch(LATEST_URL)

@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import {
+  asUpdateCheck,
   cannotStart,
   checkDue,
   describe,
@@ -525,6 +526,29 @@ test('checkDue fetches again only once a day has passed', () => {
   expect(checkDue({}, 5)).toBe(true)
   expect(checkDue({ checkedAt: 0, latest: '0.2.0' }, DAY - 1)).toBe(false)
   expect(checkDue({ checkedAt: 0, latest: '0.2.0' }, DAY)).toBe(true)
+})
+
+test('checkDue counts a check dated in the future as due, so a clock set back cannot hold off every check', () => {
+  expect(checkDue({ checkedAt: 100 * DAY, latest: '0.2.0' }, 10 * DAY)).toBe(true)
+})
+
+test('asUpdateCheck keeps only the stored fields of the right type', () => {
+  expect(asUpdateCheck(undefined)).toEqual({})
+  expect(asUpdateCheck(null)).toEqual({})
+  expect(asUpdateCheck('junk')).toEqual({})
+  expect(asUpdateCheck({ checkedAt: 5, latest: '0.3.0' })).toEqual({ checkedAt: 5, latest: '0.3.0' })
+  expect(asUpdateCheck({ checkedAt: '5', latest: 3 })).toEqual({})
+})
+
+test('a stored field of the wrong type is never trusted, and junk in the store is fetched again', async () => {
+  const { io, seen } = updateIO({ saved: { checkedAt: 10 * DAY, latest: 42 } })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.toasts.length).toBe(0)
+  const junk = updateIO({ saved: 'junk' })
+  await runUpdateCheck(junk.io, ROOT)
+  expect(junk.seen.fetches.length).toBe(1)
+  expect(junk.seen.toasts.length).toBe(1)
 })
 
 test('the update notice names both versions, the update command, and auto-update', () => {
