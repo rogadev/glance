@@ -176,7 +176,11 @@ Events from inside a subagent never cover up a question the main thread is waiti
 
 Work happens on `dev`. `main` only takes pull requests from `dev` (a CI check enforces it). There's no release pull request: merging a `dev` pull request into `main` publishes the release itself. Conventional commit messages decide the next version.
 
-1. Commit to `dev`, or branch from it. Write commit messages as conventional commits: `feat:` for new behavior (minor version), `fix:` or `perf:` for a bug fix (patch), and `docs:`, `test:`, `ci:`, `refactor:`, or `chore:` for the rest (no release on their own). Mark a breaking change with `!`, for example `feat!:`, or a `BREAKING CHANGE:` footer: it bumps the major version, or the minor one before 1.0.0.
+1. Commit to `dev`, or branch from it. Write commit messages as conventional commits; for a version a.b.c, they decide the next one:
+   - `feat:` (new behavior) bumps b and resets c to 0.
+   - `fix:`, `perf:`, `refactor:`, and `revert:` bump c. Most releases are these.
+   - `docs:`, `test:`, `ci:`, and `chore:` release nothing on their own.
+   - a is never bumped automatically. To release a new major version, set it by hand in `.claude-plugin/plugin.json` on `dev` (for example `1.0.0`) and commit that: the `version` job keeps it and writes its changelog section. A breaking mark (`feat!:`, or a `BREAKING CHANGE:` footer) only lists the commit under its own changelog heading.
 2. Before you push, run what CI runs:
    - `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs test/release.test.mjs`
    - `claude plugin validate .` and `claude plugin test .`
