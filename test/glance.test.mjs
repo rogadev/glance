@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ancestorTtyFrom, decide, detectTerminal, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
+import { ancestorTtyFrom, decide, detectTerminal, diagnoseReset, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
 
 const T = 1_000_000;
 
@@ -271,6 +271,49 @@ test('GlanceReset keeps only agents the engine still lists as running', () => {
   assert.deepEqual(ids(s), ['alive']);
   // The kept agent still holds the tint after the next turn, as it should.
   assert.equal(run([main('UserPromptSubmit'), main('Stop')], s).state, WORKING);
+});
+
+// diagnoseReset says what /glance-fix found before it reset the pane.
+const MIN = 60 * 1000;
+
+test('/glance-fix on a tint held by a background shell names it and its age, not a bug', () => {
+  const stuck = run([main('UserPromptSubmit'), bgShell('dev'), main('Stop')]);
+  const d = diagnoseReset(stuck, main('GlanceReset', { live_agents: [] }), stuck.updatedAt + 42 * MIN);
+  assert.equal(d.verdict, 'stale-background');
+  assert.equal(d.suspect, false);
+  assert.match(d.cause, /shell dev \(started 42 min ago\)/);
+});
+
+test('/glance-fix on agents Claude Code no longer lists reports a missed agent end', () => {
+  const stuck = run([main('UserPromptSubmit'), sub('SubagentStart', 'gone'), main('Stop')]);
+  const d = diagnoseReset(stuck, main('GlanceReset', { live_agents: [] }), stuck.updatedAt + MIN);
+  assert.equal(d.verdict, 'missed-agent-end');
+  assert.equal(d.suspect, true);
+  assert.match(d.cause, /gone/);
+});
+
+test('/glance-fix with every tracked agent still running says the tint was right', () => {
+  const s = run([main('UserPromptSubmit'), sub('SubagentStart', 'alive'), main('Stop')]);
+  const d = diagnoseReset(s, main('GlanceReset', { live_agents: ['alive'] }), s.updatedAt + MIN);
+  assert.equal(d.verdict, 'agents-running');
+  assert.equal(d.suspect, false);
+});
+
+test('/glance-fix on a working pane with nothing running reports a missed end of turn', () => {
+  const s = run([main('UserPromptSubmit'), main('PreToolUse', { tool_name: 'Bash' })]);
+  const d = diagnoseReset(s, main('GlanceReset', { live_agents: [] }), s.updatedAt + 12 * MIN);
+  assert.equal(d.verdict, 'missed-end');
+  assert.equal(d.suspect, true);
+  assert.match(d.cause, /tool/);
+  assert.match(d.cause, /12 min ago/);
+});
+
+test('/glance-fix on a pane glance already had as needs you points at painting', () => {
+  const s = run([main('UserPromptSubmit'), main('Stop')]);
+  const d = diagnoseReset(s, main('GlanceReset', { live_agents: [] }), s.updatedAt + MIN);
+  assert.equal(d.verdict, 'already-needs-you');
+  assert.equal(d.suspect, true);
+  assert.match(d.cause, /\/glance-check/);
 });
 
 // TitleIdle comes from paint.exe --watch when the pane title shows Claude idle.

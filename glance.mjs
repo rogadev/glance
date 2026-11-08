@@ -97,6 +97,70 @@ function liveBackground(prev, now) {
   return live;
 }
 
+/** "42 min ago", for /glance-fix's diagnosis. */
+function ago(ms) {
+  const min = Math.round(ms / 60000);
+  return min < 1 ? 'under a minute ago' : `${min} min ago`;
+}
+
+/**
+ * What /glance-fix found before it reset the pane: a verdict, whether it looks
+ * like a glance bug (suspect, which makes the command suggest /glance-report),
+ * and the cause in plain words. Pure; `prev` is the state before the reset and
+ * `input.live_agents` the agents the engine still lists as running.
+ */
+export function diagnoseReset(prev, input, now) {
+  const live = new Set(Array.isArray(input.live_agents) ? input.live_agents.map(String) : []);
+  const before = liveBackground(prev, now);
+  const lost = [];
+  const stale = [];
+  let running = 0;
+  for (const [id, item] of Object.entries(before)) {
+    if (item.kind === 'agent') {
+      if (live.has(id)) running++;
+      else lost.push(id);
+    } else {
+      const due = Math.round((item.dueAt - now) / 60000);
+      const since = item.kind === 'shell' ? `started ${ago(now - item.at)}` : due >= 0 ? `due in ${due} min` : `due ${-due} min ago`;
+      stale.push(`${item.kind} ${id} (${since})`);
+    }
+  }
+  const last = prev.updatedAt ? `, set ${ago(now - prev.updatedAt)}` : '';
+  if (prev.state !== WORKING) {
+    return {
+      verdict: 'already-needs-you',
+      suspect: true,
+      cause: `glance already had this pane as needs you (${prev.reason}${last}). If it looked tinted, the color didn't reach the terminal: run /glance-check.`,
+    };
+  }
+  if (lost.length) {
+    return {
+      verdict: 'missed-agent-end',
+      suspect: true,
+      cause: `glance was waiting on ${lost.length} subagent(s) that Claude Code no longer lists as running (${lost.join(', ')}), so it missed their end.`,
+    };
+  }
+  if (stale.length) {
+    return {
+      verdict: 'stale-background',
+      suspect: false,
+      cause: `glance was keeping the tint for background work it never heard finish: ${stale.join(', ')}. A shell left running, such as a dev server, does that for up to an hour.`,
+    };
+  }
+  if (running) {
+    return {
+      verdict: 'agents-running',
+      suspect: false,
+      cause: `${running} subagent(s) are still running, so the tint was right. glance kept them.`,
+    };
+  }
+  return {
+    verdict: 'missed-end',
+    suspect: true,
+    cause: `Nothing was running, but glance still had the pane working (${prev.reason}${last}). If Claude had finished, glance missed the end of its turn.`,
+  };
+}
+
 /** True when any background work should keep the pane working right now. */
 function holdsTint(background, now) {
   return Object.values(background).some((item) => !SCHEDULED.has(item.kind) || scheduleHoldsTint(item, now));
@@ -328,15 +392,8 @@ function check(input, stateFile) {
     state = readState(stateFile);
     restore = paint(osc(state.state));
   });
-  let version = 'unknown';
-  try {
-    const manifest = path.join(path.dirname(fileURLToPath(import.meta.url)), '.claude-plugin', 'plugin.json');
-    version = JSON.parse(fs.readFileSync(manifest, 'utf8')).version;
-  } catch {
-    // Reported as unknown.
-  }
   const report = {
-    version,
+    version: glanceVersion(),
     platform: `${process.platform} ${process.arch}`,
     node: process.version,
     surface: input.surface || 'unknown',
@@ -491,6 +548,66 @@ function readState(file) {
   }
 }
 
+/** The installed glance version from the plugin manifest, or 'unknown'. */
+function glanceVersion() {
+  try {
+    const manifest = path.join(path.dirname(fileURLToPath(import.meta.url)), '.claude-plugin', 'plugin.json');
+    return JSON.parse(fs.readFileSync(manifest, 'utf8')).version;
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** The last `max` events.log lines for one session (its id's first 8 characters). */
+function sessionLog(sid, max) {
+  try {
+    const lines = fs.readFileSync(path.join(CONFIG.stateDir, 'events.log'), 'utf8').split('\n');
+    return lines.filter((l) => l.split(' ')[1] === sid).slice(-max);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Saves what /glance-fix found, for /glance-report and the report-issue skill:
+ * the state before the reset, the diagnosis, versions, and this session's
+ * recent log lines (no prompts). Returns the file's path, or '' if it failed.
+ */
+function saveSnapshot(input, prev, diagnosis, written, now) {
+  const sid = String(input.session_id || '').slice(0, 8);
+  const file = path.join(CONFIG.stateDir, `fix-${safeId(input.session_id)}.json`);
+  const background = Object.entries(liveBackground(prev, now)).map(([id, item]) => ({
+    id,
+    kind: item.kind,
+    ...(item.at ? { started_min_ago: Math.round((now - item.at) / 60000) } : {}),
+    ...(item.dueAt ? { due_in_min: Math.round((item.dueAt - now) / 60000) } : {}),
+  }));
+  const snapshot = {
+    at: new Date(now).toISOString(),
+    glance: glanceVersion(),
+    platform: `${process.platform} ${process.arch}`,
+    node: process.version,
+    session: sid,
+    before: {
+      state: prev.state,
+      reason: prev.reason,
+      set_min_ago: prev.updatedAt ? Math.round((now - prev.updatedAt) / 60000) : null,
+      background,
+    },
+    live_agents: Array.isArray(input.live_agents) ? input.live_agents.length : 0,
+    diagnosis,
+    paint: written,
+    log: sessionLog(sid, 40),
+  };
+  try {
+    fs.writeFileSync(file, JSON.stringify(snapshot, null, 2));
+    return file;
+  } catch (err) {
+    log(`${snapshot.at} ${sid} glance-fix snapshot-failed:${err.code || err.message}`);
+    return '';
+  }
+}
+
 function log(line) {
   const file = path.join(CONFIG.stateDir, 'events.log');
   try {
@@ -620,12 +737,15 @@ function apply(input, stateFile) {
     const before = liveBackground(prev, now);
     const dropped = Object.keys(before).filter((id) => !next.background[id]);
     const kept = Object.keys(next.background);
+    const diagnosis = diagnoseReset(prev, input, now);
     process.stdout.write(
       JSON.stringify({
         was: `${prev.state} [${prev.reason}]`,
         dropped: dropped.map((id) => `${before[id].kind} ${id}`),
         kept: kept.map((id) => `agent ${id}`),
         paint: written,
+        diagnosis,
+        snapshot: saveSnapshot(input, prev, diagnosis, written, now),
       }) + '\n',
     );
   }

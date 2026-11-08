@@ -37,9 +37,11 @@ export function parsePane(stdout: string): Pane | null {
 
 const FIX = 'glance-fix'
 const CHECK = 'glance-check'
+const REPORT = 'glance-report'
 const LIVE: ReadonlySet<string> = new Set(['pending', 'running', 'waiting'])
 
-type Summary = { was?: string; dropped?: string[]; kept?: string[]; paint?: string }
+type Diagnosis = { verdict?: string; suspect?: boolean; cause?: string }
+type Summary = { was?: string; dropped?: string[]; kept?: string[]; paint?: string; diagnosis?: Diagnosis; snapshot?: string }
 
 /** glance.mjs's "attention [stop]" in the words the commands use: "needs you [stop]". */
 function plainState(state: string | undefined): string {
@@ -58,7 +60,28 @@ export function describe(stdout: string): string {
   lines.push(r.dropped?.length ? `Dropped: ${r.dropped.join(', ')}.` : 'Nothing stale to drop.')
   if (r.kept?.length) lines.push(`Kept (still running): ${r.kept.join(', ')}.`)
   if (r.paint !== 'ok') lines.push(`Painting failed (${r.paint}); see ~/.claude/state/glance/events.log.`)
+  if (r.diagnosis?.cause) lines.push('', r.diagnosis.cause)
+  if (r.diagnosis?.suspect) {
+    lines.push(`If the pane really was stuck, that's a glance bug. Run /${REPORT} to have Claude draft an issue for the glance maintainers; you see it before anything is filed.`)
+  }
   return lines.join('\n')
+}
+
+/** The snapshot path from glance.mjs's /glance-fix summary, or '' when there is none. */
+export function snapshotOf(stdout: string): string {
+  try {
+    const r: Summary = JSON.parse(stdout.trim().split('\n').pop() || '')
+    return typeof r.snapshot === 'string' ? r.snapshot : ''
+  } catch {
+    return ''
+  }
+}
+
+/** The prompt /glance-report hands Claude: run the report skill, on the last /glance-fix snapshot if any. */
+export function reportPrompt(snapshot: string): string {
+  const start = 'Use the glance:report-issue skill to help me report a problem with glance.'
+  if (!snapshot) return `${start} I haven't run /glance-fix in this session, so ask me what went wrong.`
+  return `${start} Start from the snapshot /glance-fix saved at ${snapshot}: it holds what glance found before it reset the pane, and this session's recent glance log lines.`
 }
 
 type Check = {
@@ -116,6 +139,19 @@ export function describeCheck(stdout: string): string {
 
 // The surface the prompt band last drew on, for /glance-check's report.
 let lastSurface = 'unknown'
+// Where the last /glance-fix saved its snapshot, for /glance-report.
+let lastSnapshot = ''
+// The prompt /glance-report queued, submitted once its turn completes.
+let pendingReport = ''
+
+/** Submits the prompt /glance-report queued. Not awaited: it is a turn of its own. */
+function submitReport($: EngineInterface) {
+  const text = pendingReport
+  pendingReport = ''
+  void $.prompt.submit({ text }).catch((err: unknown) => {
+    $.ui.log(`glance: /glance-report could not submit its prompt: ${String(err)}`, { to: 'debug' })
+  })
+}
 
 // Set once `node` can't be started, so the warning shows once per load
 // instead of on every event.
@@ -255,6 +291,10 @@ export const register: Register = (on) => {
       // Runs even while a turn is in flight, in case the stuck part is the turn.
       immediate: true,
     })
+    await $.command.register({
+      name: REPORT,
+      description: 'Have Claude research a glance problem (from the last /glance-fix, if any) and draft an issue for the glance maintainers',
+    })
     return next(e)
   })
 
@@ -273,8 +313,17 @@ export const register: Register = (on) => {
     const r = await runOwn($, { hook_event_name: 'GlanceReset', session_id, live_agents })
     if (!r) return { text: 'glance-fix: could not run glance.mjs. Is Node.js installed and on PATH?' }
     if (r.exitCode !== 0) return { text: `glance-fix: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
+    lastSnapshot = snapshotOf(r.stdout)
     return { text: describe(r.stdout) }
   }).catch((_$, _e, next) => ({ text: `glance-fix failed: ${String(next.error)}` }))
+
+  on('command.run', { command: REPORT }, async () => {
+    // The engine refuses a prompt submitted from a command.run hook (it would
+    // wait on this command's own turn), and a command's turn sends no
+    // turn.complete, so the next idle draw of the prompt area submits it.
+    pendingReport = reportPrompt(lastSnapshot)
+    return { text: 'glance-report: asking Claude to research this and draft an issue for glance. It shows you the draft before anything is filed.' }
+  }).catch((_$, _e, next) => ({ text: `glance-report failed: ${String(next.error)}` }))
 
   /**
    * The desktop app's stand-in for the terminal tint: a full-width band in the
@@ -284,6 +333,8 @@ export const register: Register = (on) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Not awaited: drawing shouldn't wait on glance.mjs, which sleeps on UiIdle.
     void noteWorking($, e.props.isWorking)
+    // /glance-report's prompt, once its command is over and the engine is idle.
+    if (pendingReport && !e.props.isWorking) submitReport($)
     lastSurface = e.surface
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     const now = await read($, pane)

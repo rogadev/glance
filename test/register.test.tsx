@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { cannotStart, describeCheck, parsePane } from '../hooks/register'
+import { cannotStart, describe, describeCheck, parsePane, reportPrompt } from '../hooks/register'
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], runs: any[], stdout = '') {
@@ -93,6 +93,55 @@ test('/glance-fix sends GlanceReset with only the running agents and reports the
   })
   expect(r.text).toContain('Dropped: shell b1.')
   expect(r.text).toContain('Kept (still running): agent a1.')
+})
+
+const fixed = (suspect: boolean) =>
+  JSON.stringify({
+    was: 'working [tool]',
+    dropped: [],
+    kept: [],
+    paint: 'ok',
+    diagnosis: { verdict: suspect ? 'missed-end' : 'stale-background', suspect, cause: 'The cause in words.' },
+    snapshot: '/home/u/.claude/state/glance/fix-sess-1.json',
+  })
+
+test('/glance-fix shows the cause, and suggests /glance-report only for a suspected bug', () => {
+  const bug = describe(fixed(true))
+  expect(bug).toContain('The cause in words.')
+  expect(bug).toContain('/glance-report')
+  const fine = describe(fixed(false))
+  expect(fine).toContain('The cause in words.')
+  expect(fine).not.toContain('/glance-report')
+})
+
+test('/glance-report with no /glance-fix asks Claude to ask what went wrong', () => {
+  expect(reportPrompt('')).toContain('glance:report-issue')
+  expect(reportPrompt('')).toContain('ask me what went wrong')
+})
+
+test('/glance-report asks Claude to run the report skill on the last /glance-fix snapshot', async ($, on) => {
+  const runs: any[] = []
+  const prompts: any[] = []
+  engine(on, runs, fixed(true) + '\n')
+  on('agent.list', () => ({ value: [] }))
+  on('prompt.submit', (_, e) => (prompts.push(e), { text: e.text }))
+  engineBand(on)
+  on('command.run', () => ({ text: 'engine ran it' }))
+  await $.command.run({ command: 'glance-fix' })
+  const r = await $.command.run({ command: 'glance-report' })
+  expect(prompts.length).toBe(0)
+  // The prompt goes in at the first draw of the prompt area with the engine
+  // idle, and only once (live: test/live/run.mjs report).
+  const draw = (isWorking: boolean) => $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking } })
+  await draw(true)
+  expect(prompts.length).toBe(0)
+  await draw(false)
+  await draw(false)
+  await new Promise((res) => setTimeout(res, 0))
+  expect(prompts.length).toBe(1)
+  expect(prompts[0].text).toContain('glance:report-issue')
+  expect(prompts[0].text).toContain('/home/u/.claude/state/glance/fix-sess-1.json')
+  expect(r.text).toContain('draft')
 })
 
 const WORKING = JSON.stringify({ state: 'working', color: '#1F2D3D' }) + '\n'

@@ -20,13 +20,14 @@ On the maintainer's machine this folder is also the live install: `CLAUDE_CODE_P
 ## Where things are
 
 - `glance.mjs`: the hook script (pure `decide()` plus I/O). `schedule.mjs`: cron parsing and the rules for `/loop` wakeups and cron jobs.
-- `hooks/register.tsx`: the mod. Forwards the settings-hook events (`classic.*`), tool calls (as `PreToolUse`), Esc (`TurnAborted`), the engine's `isWorking` (`UiWorking`, `UiIdle`), `/glance-check` (`GlanceCheck`), and `/glance-fix` (`GlanceReset`) to `glance.mjs`, and draws the Claude Desktop band.
+- `hooks/register.tsx`: the mod. Forwards the settings-hook events (`classic.*`), tool calls (as `PreToolUse`), Esc (`TurnAborted`), the engine's `isWorking` (`UiWorking`, `UiIdle`), `/glance-check` (`GlanceCheck`), and `/glance-fix` (`GlanceReset`) to `glance.mjs`, serves `/glance-report` (a prompt that starts the `glance:report-issue` skill), and draws the Claude Desktop band.
+- `skills/report-issue/`: the `glance:report-issue` skill users run to research and file a glance issue. `.github/ISSUE_TEMPLATE/` and `.github/CONTRIBUTING.md` are its by-hand counterparts.
 - `test/`: `glance.test.mjs` and `schedule.test.mjs` (unit), `smoke.test.mjs` (runs `glance.mjs` end to end in a throwaway home), `terminal.test.mjs` (paints a real pseudo-terminal through `pty_run.py`, or a real console), `register.test.tsx` (the mod, run by `claude plugin test .` only), and `live/` (drives a real interactive session on Windows; local only, spends tokens).
 - `types/index.d.ts`: the mod's state shape (`Pane`), registered with the engine through `PluginState`.
 - `paint.cs`: source of `paint.exe`, the console painter and the per-session title watcher (`--watch`). `build.ps1`: rebuilds it with the `csc.exe` that ships with Windows.
 - `.claude-plugin/`: `plugin.json` (Release Please bumps its version) and `marketplace.json` (what `/plugin install glance --marketplace rogadev/glance` reads).
 - `.github/workflows/`: `ci.yml` (tests on three systems, plugin checks, `paint.exe` check, the dev-only-into-main guard, and the `ci ok` check the branch rules require) and `release.yml` (Release Please, then syncing `main` back into `dev`).
-- State and log: `~/.claude/state/glance/` (`<session_id>.json`, `<session_id>.watch` with the watcher pid, `events.log`).
+- State and log: `~/.claude/state/glance/` (`<session_id>.json`, `<session_id>.watch` with the watcher pid, `fix-<session_id>.json` from `/glance-fix`, `events.log`).
 
 ## History
 

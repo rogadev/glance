@@ -68,6 +68,25 @@ test('GlanceReset prints the summary /glance-fix shows', (t) => {
   assert.equal(summary.was, 'working [background-running]');
   assert.deepEqual(summary.dropped, ['shell devserver']);
   assert.deepEqual(summary.kept, []);
+  assert.equal(summary.diagnosis.verdict, 'stale-background');
+});
+
+test('GlanceReset saves a snapshot with the diagnosis and only that session log lines', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: 'other-session', prompt: 'hi' });
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: 'smoke-4', prompt: 'hi' });
+  hook(dir, { hook_event_name: 'PreToolUse', session_id: 'smoke-4', tool_name: 'Bash' });
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: 'smoke-4', live_agents: [] });
+  const summary = JSON.parse(r.stdout.trim());
+  assert.equal(summary.snapshot, path.join(state, 'fix-smoke-4.json'));
+  const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
+  assert.equal(snap.diagnosis.verdict, 'missed-end');
+  assert.equal(snap.before.state, 'working');
+  assert.equal(typeof snap.glance, 'string');
+  assert.equal(snap.log.length, 2);
+  assert.ok(snap.log.every((l) => l.includes(' smoke-4 ')));
+  assert.ok(!JSON.stringify(snap).includes('other-se'));
 });
 
 test('unparsable input is logged, not dropped silently', (t) => {

@@ -21,6 +21,7 @@ Three rules come before everything else:
 - **Installed source:** this skill's base directory is `<plugin root>/skills/report-issue`, so the plugin root is two levels up. It holds `glance.mjs` (the hook script, with the pure `decide()` rules and the `CONFIG` block), `schedule.mjs` (`/loop` and cron rules), `hooks/register.tsx` (the mod that forwards Claude Code's events and shows glance's notices), `paint.cs` (the Windows painter's source and its exit codes), `README.md`, and `.claude-plugin/plugin.json` (the version).
 - **Event log:** `~/.claude/state/glance/events.log`. One line per event: `<UTC time> <first 8 chars of session id> <main or agent:id> <Event> (<tool> via:mod) -> <working|attention> [<reason>] bg=<background items> <paint result>`. A paint result of `ok` means the color code was written; `paint-failed:<reason>` and `paint-skipped:<reason>` mean it wasn't.
 - **State:** `~/.claude/state/glance/<session id>.json` (what glance thinks the pane shows and which background work it tracks). It is deleted when a session ends.
+- **/glance-fix snapshot:** `~/.claude/state/glance/fix-<session id>.json`, written each time the user runs `/glance-fix`. It holds the state before the reset (state, reason, how long ago it was set, the background work glance was tracking and its ages), glance's diagnosis (`verdict`, `suspect`, `cause`), the glance, Node, and system versions, and that session's last 40 event log lines. `/glance-report` names it in the prompt that starts this skill. No prompt text is in it.
 - **Debug capture:** `~/.claude/state/glance/debug.jsonl`, only when the user created `~/.claude/state/glance/debug`. It holds prompt text. Read it only if the user agrees, and never quote it in the issue.
 - **Claude Code's debug log** (`claude --debug`) is where the mod logs failures it doesn't show as a notice, for example `glance: could not run glance.mjs: ...`.
 
@@ -37,7 +38,9 @@ Ask only for what you can't find yourself. One short question round at most.
 
 ## 2. Gather the facts
 
-Run these yourself (adjust the shell to the user's system):
+If the prompt names a `/glance-fix` snapshot, read it first. It is the best evidence there is: it was taken at the moment the user saw the problem. Its `diagnosis.cause` is glance's own reading and may be wrong; check it against the log lines. A `verdict` of `stale-background` or `agents-running` is designed behavior (step 3), and `missed-end` only counts as a bug if Claude had finished when the user ran `/glance-fix`, so ask if that isn't clear.
+
+Then run these yourself (adjust the shell to the user's system):
 
 - glance version: the `version` in `<plugin root>/.claude-plugin/plugin.json`.
 - Claude Code version: `claude --version`. Node version: `node --version`. Operating system and version.
@@ -86,7 +89,7 @@ Use the shape of the repo's issue forms (`.github/ISSUE_TEMPLATE/` in the plugin
 2. **Environment:** glance version, Claude Code version, Node version, operating system, terminal app, multiplexer if any.
 3. **What happened:** the exact steps or circumstances, and exact message text in quotes.
 4. **Expected:** what should have happened.
-5. **Evidence:** the trimmed event log lines in a fenced block, the `/glance-check` report if there is one, and the state file if it matters. Note that session ids are shortened.
+5. **Evidence:** the `/glance-fix` snapshot's `before` and `diagnosis` if there is one, the trimmed event log lines in a fenced block, the `/glance-check` report if there is one, and the state file if it matters. Note that session ids are shortened.
 6. **Likely cause:** your reading of the code, with `file:line` citations against the installed version, split into confirmed and suspected.
 7. **Workaround:** if one exists (`/glance-fix`, restarting the session, and so on).
 8. A last line: `Researched and drafted with Claude using glance's report-issue skill.`

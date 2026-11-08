@@ -59,12 +59,13 @@ If a pane stays slate while Claude is plainly waiting on you, type `/glance-fix`
 1. Asks Claude Code which subagents are still running, and keeps those.
 2. Drops every tracked background shell and scheduled run. glance can't check whether those are still alive, and a stale one, such as a dev server left running, is what usually holds a tint.
 3. Repaints the pane as "needs you" and prints what it dropped.
+4. Says what it found before the reset, and whether that was a glance bug: background work glance never heard finish (designed: a shell holds the tint for up to an hour), subagents still running (the tint was right), subagents Claude Code no longer lists, a working pane with nothing running (glance missed the end of a turn), or a pane glance already had as needs you (the color didn't reach the terminal). It saves this, with the session's recent log lines, to `~/.claude/state/glance/fix-<session id>.json`. When it looks like a bug, it suggests `/glance-report`.
 
 It runs even while a turn is in progress, and it changes nothing in your conversation.
 
 ## Report an issue
 
-In Claude Code, run `/glance:report-issue` with a few words on what went wrong. Claude gathers glance's versions and log lines, checks the docs and existing issues, reads glance's code to explain what likely happened, and drafts the issue. It shows you the draft and files only when you say so. To file by hand, or to see what a good report includes, read [How to report a glance issue](.github/CONTRIBUTING.md#reporting-an-issue).
+Right after `/glance-fix`, type `/glance-report`: it asks Claude to report what `/glance-fix` found, starting from its saved snapshot. Otherwise, run `/glance:report-issue` with a few words on what went wrong. Claude gathers glance's versions and log lines, checks the docs and existing issues, reads glance's code to explain what likely happened, and drafts the issue. It shows you the draft and files only when you say so. To file by hand, or to see what a good report includes, read [How to report a glance issue](.github/CONTRIBUTING.md#reporting-an-issue).
 
 ## How it works
 
@@ -106,7 +107,7 @@ There's also a long-lived **title watcher** (`paint.exe --watch`), **off** by de
 | `StopFailure` | Needs you |
 | `TurnAborted` (from the mod) | Needs you (`aborted`), unless background work is still live |
 | `GlanceCheck` (from `/glance-check`) | Shows the working color for 1.5 s, then repaints the current state and reports; changes no state |
-| `GlanceReset` (from `/glance-fix`) | Needs you (`reset`); keeps only agents the engine still lists as running, drops every shell and scheduled run |
+| `GlanceReset` (from `/glance-fix`) | Needs you (`reset`); keeps only agents the engine still lists as running, drops every shell and scheduled run; saves a diagnosis to `fix-<session id>.json` |
 | `SessionEnd` | Reset to the profile background; delete the state file |
 
 Events from inside a subagent never cover up a question the main thread is waiting on.
@@ -156,6 +157,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - After you approve a permission prompt, the pane stays on needs-you until that tool finishes, so a long approved command looks idle. No event marks the approval: `tool.check` runs before the prompt, and `ui.press` and `ui.select` only cover components a plugin draws.
 - Agent teams are untested: whether teammates send `SubagentStart`, and what `TeammateIdle` should mean for the lead's pane. `TaskCreated` and `TaskCompleted` are task-list events, not busy signals, so glance ignores them. `PermissionDenied` (a rule or auto mode refusing a tool) needs nothing: Claude keeps working.
 - (2026-11-08, 2.1.319) `$.process.run` rejects with a `HooksError` that has no `code`, only a message. A command that isn't found: `$.process.run(<cmd>) failed to start: ENOENT: Command '<cmd>' not found or is in an unsafe location (current directory)`. A run past `timeoutMs`: `$.process.run(<cmd>) aborted: still running after <n>ms`. The mod tells a missing Node from a slow run by that message (a probe mod run with `claude -p --plugin-dir`). In `claude plugin test`, a `process.run` hook that throws is skipped and the call rejects with `no implementation for process.run`; return `{ deny: <message> }` to make it reject with a given message.
+- (2026-11-08, 2.1.319) A mod can't submit a prompt from its own `command.run` hook: `$.prompt.submit` rejects with "called from a command.run hook, it would wait on the turn this hook is holding". A mod command's turn sends no `turn.complete` either, though that error suggests it. `/glance-report` queues its prompt and submits it at the next draw of the prompt area (`ui.render` of `AbovePrompt`) with `isWorking` false, about a second after the command (live harness, `report` scenario).
 - The title watcher depends on Claude Code's title glyphs. If a release changes them, `TitleIdle` stops firing. The log shows whether `TitleIdle` lines still appear.
 
 ## Contributing
