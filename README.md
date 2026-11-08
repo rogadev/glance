@@ -89,7 +89,7 @@ Each run of `glance.mjs`:
 1. Reads the event JSON from stdin.
 2. Under a per-session lock, loads `~/.claude/state/glance/<session_id>.json`, runs the pure `decide()` function, and saves the result.
 3. Runs `paint.exe`, which writes `OSC 11;<color>` (working) or `OSC 111` (reset to the profile background, needs you) to the pane.
-4. Appends one line to `~/.claude/state/glance/events.log` (rotates at 512 KB). A line ending `ok` means `paint.exe` exited 0; otherwise it ends `paint-failed:<reason>` or `paint-skipped:<reason>`.
+4. Appends one line to `~/.claude/state/glance/events.log` (rotates at 512 KB). After `bg=<count>`, a line names any background items the event added or removed, for example `bg=1 (+shell b1, -agent a2)`. A line ending `ok` means `paint.exe` exited 0; otherwise it ends `paint-failed:<reason>` or `paint-skipped:<reason>`.
 
 Claude Code starts hooks with their own hidden console, so writing to it reaches nothing. `paint.exe` (built from `paint.cs` by `build.ps1`) walks up to the nearest `claude.exe` ancestor, attaches to that process's console (the visible pane), and writes there. A run takes about 80 ms: about 40 for Node and about 40 for `paint.exe`.
 
@@ -104,7 +104,7 @@ There's also a long-lived **title watcher** (`paint.exe --watch`), **off** by de
 | `PostCompact` | After `/compact`: needs you (`compact-done`), unless background work is still live. After an automatic compact: nothing, since the turn goes on and ends with its own `Stop` |
 | `UserPromptSubmit` | Working; clears background work named in any `<task-notification>` in the prompt; a prompt that matches a scheduled run's prompt means it fired (a recurring cron moves to its next run, anything else ends) |
 | `PreToolUse` (main thread) | Working, except `AskUserQuestion` and `ExitPlanMode`, which mean needs you |
-| `PostToolUse`, `PostToolUseFailure`, `ElicitationResult` | Working (main thread, or a subagent clearing its own permission prompt); a `tool_response.backgroundTaskId` adds a background shell; `ScheduleWakeup` and `CronCreate` add a scheduled run, and `ScheduleWakeup` with `stop` or `CronDelete` removes it |
+| `PostToolUse`, `PostToolUseFailure`, `ElicitationResult` | Working (main thread, or a subagent clearing its own permission prompt); a `tool_response.backgroundTaskId` adds a background shell, and a successful `TaskStop` (or the older `KillShell`) removes the task it stopped; `ScheduleWakeup` and `CronCreate` add a scheduled run, and `ScheduleWakeup` with `stop` or `CronDelete` removes it |
 | `PermissionRequest`, `Elicitation` | Needs you |
 | `Notification` | Needs you for `permission_prompt`, `idle_prompt`, `elicitation_*dialog`, `agent_needs_input`; `idle_prompt` with live background work stays working |
 | `SubagentStart` / `SubagentStop` | Add / remove the agent; no color change |
@@ -140,6 +140,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - Hook config changes apply to running sessions without a restart.
 - **Esc fires no hook.** Not `Stop`, not anything. An Esc after the reply starts writes a transcript line with `interruptedMessageId`; an Esc before any reply pulls the prompt back into the input box and writes nothing. The pane title flips to `✳` in both cases, hence the title watcher, and later the mod's `TurnAborted`.
 - A background shell's `PostToolUse` has `tool_response.backgroundTaskId` (for example `b37q4qei1`); its end arrives as a `<task-notification>` prompt with the same id and `<status>completed</status>`.
+- A background shell stopped with `TaskStop` gets **no** `<task-notification>`, not even on the next prompt (2026-11-08, Claude Code 2.1.319). `TaskStop`'s `PostToolUse` has `tool_input.task_id` and `tool_response.task_id` (the shell's `backgroundTaskId`) and `tool_response.task_type` `local_bash`; the mod's `PreToolUse` for it carries no input. Before glance cleared shells on that `PostToolUse`, every stopped shell held the tint until it expired or `/glance-fix` ran: three of the four stuck panes fixed on 2026-11-08 had a `TaskStop` just before.
 - `ScheduleWakeup`'s `PostToolUse` has `tool_response.scheduledFor` (epoch ms); `CronCreate`'s has `tool_response.id`, `nextFireAt` (epoch ms, including the scheduler's shift), `recurring`, and `humanSchedule`.
 - Live `/loop` test (18:27 to 18:33Z): the pane stayed working through an untracked cron fire, a tracked wakeup fire, and the wait for a tracked one-shot cron. `idle_prompt` does fire while scheduled work is pending; glance keeps the tint, as designed. The count went 2, then 1, then 0 as each tracked run fired.
 - Node misreads some Windows time zones: on the test machine it reported GMT-8 for a GMT-7 clock. Claude Code and .NET read it correctly. Cron math therefore uses the offset from `paint.exe --utc-offset`, stored on each cron entry as `offsetMin`.
