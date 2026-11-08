@@ -1,0 +1,39 @@
+name: Terminal support
+description: Report whether glance's tint shows up in a terminal app, working or not.
+title: "[TERMINAL] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The README's "Where it works" table lists what's confirmed. A report for a terminal marked Expected or Unknown helps, whether the tint works there or not.
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal app and version
+      placeholder: iTerm2 3.5.4
+    validations:
+      required: true
+  - type: input
+    id: between
+    attributes:
+      label: Anything in between
+      description: tmux, GNU screen, SSH, WSL, or none.
+      placeholder: none
+  - type: dropdown
+    id: result
+    attributes:
+      label: Did you see the color change and change back during /glance-check?
+      options:
+        - "Yes, it changed and changed back"
+        - "It changed but didn't change back"
+        - "No change at all"
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: /glance-check report
+      description: Type `/glance-check` in a session in that terminal and paste what it prints.
+      render: text
+    validations:
+      required: true

@@ -46,7 +46,7 @@ glance paints the terminal window Claude Code runs in, so what matters is the wi
 | Claude desktop app | Draws a slate "Claude is working" band above the prompt instead of a tint (no terminal to paint). Tested with the mod test kit, not yet confirmed in the app |
 | WSL | Runs the macOS and Linux painter inside WSL, so it should behave like the window WSL runs in. Untested |
 
-If yours is unknown or doesn't work, run `/glance-check` and open an issue with its report.
+If yours is unknown or doesn't work, run `/glance-check` and open an issue with its report. See [Report an issue](#report-an-issue).
 
 ## Check it works: `/glance-check`
 
@@ -61,6 +61,10 @@ If a pane stays slate while Claude is plainly waiting on you, type `/glance-fix`
 3. Repaints the pane as "needs you" and prints what it dropped.
 
 It runs even while a turn is in progress, and it changes nothing in your conversation.
+
+## Report an issue
+
+In Claude Code, run `/glance:report-issue` with a few words on what went wrong. Claude gathers glance's versions and log lines, checks the docs and existing issues, reads glance's code to explain what likely happened, and drafts the issue. It shows you the draft and files only when you say so. To file by hand, or to see what a good report includes, read [How to report a glance issue](.github/CONTRIBUTING.md#reporting-an-issue).
 
 ## How it works
 

@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest a change to how glance behaves.
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to be able to do
+      description: The situation and what's missing, in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What glance does today
+      description: Optional. If this is about a designed limit (the README's "Safety nets" section lists them), say which one.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea for how it could work
+      description: Optional.
