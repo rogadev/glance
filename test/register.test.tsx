@@ -1,5 +1,19 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { cannotStart, describe, describeCheck, parsePane, reportPrompt, snapshotOf } from '../hooks/register'
+import {
+  asUpdateCheck,
+  cannotStart,
+  checkDue,
+  describe,
+  describeCheck,
+  isNewer,
+  marketplaceOf,
+  parsePane,
+  reportPrompt,
+  runUpdateCheck,
+  snapshotOf,
+  updateGlance,
+  updateNotice,
+} from '../hooks/register'
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], runs: any[], stdout = '') {
@@ -485,4 +499,286 @@ test('parsePane takes only a well-formed state line', async () => {
   expect(parsePane('{"state":"busy","color":"#1F2D3D"}')).toBeNull()
   expect(parsePane('{"state":"working"}')).toBeNull()
   expect(parsePane('')).toBeNull()
+})
+
+// The update check. ROOT is where a marketplace install of glance lives.
+const ROOT = '/home/u/.claude/plugins/cache/glance/glance/0.2.0'
+const DAY = 24 * 60 * 60 * 1000
+
+test('isNewer compares x.y.z versions, and nothing else counts as newer', () => {
+  expect(isNewer('0.3.0', '0.2.0')).toBe(true)
+  expect(isNewer('0.10.0', '0.9.9')).toBe(true)
+  expect(isNewer('1.0.0', '0.99.0')).toBe(true)
+  expect(isNewer('0.2.0', '0.2.0')).toBe(false)
+  expect(isNewer('0.1.9', '0.2.0')).toBe(false)
+  expect(isNewer('0.3.0-beta', '0.2.0')).toBe(false)
+  expect(isNewer('', '0.2.0')).toBe(false)
+})
+
+test('marketplaceOf reads the marketplace off an install folder, and gives none for a folder of its own', () => {
+  expect(marketplaceOf(ROOT)).toBe('glance')
+  expect(marketplaceOf(String.raw`C:\Users\u\.claude\plugins\cache\rogadev-glance\glance\0.2.0`)).toBe('rogadev-glance')
+  expect(marketplaceOf(String.raw`C:\Users\u\Documents\GitHub\glance`)).toBe('')
+  expect(marketplaceOf('/home/u/.claude/plugins/cache/glance/other/1.0.0')).toBe('')
+})
+
+test('checkDue fetches again only once a day has passed', () => {
+  expect(checkDue({}, 5)).toBe(true)
+  expect(checkDue({ checkedAt: 0, latest: '0.2.0' }, DAY - 1)).toBe(false)
+  expect(checkDue({ checkedAt: 0, latest: '0.2.0' }, DAY)).toBe(true)
+})
+
+test('checkDue counts a check dated in the future as due, so a clock set back cannot hold off every check', () => {
+  expect(checkDue({ checkedAt: 100 * DAY, latest: '0.2.0' }, 10 * DAY)).toBe(true)
+})
+
+test('asUpdateCheck keeps only the stored fields of the right type', () => {
+  expect(asUpdateCheck(undefined)).toEqual({})
+  expect(asUpdateCheck(null)).toEqual({})
+  expect(asUpdateCheck('junk')).toEqual({})
+  expect(asUpdateCheck({ checkedAt: 5, latest: '0.3.0' })).toEqual({ checkedAt: 5, latest: '0.3.0' })
+  expect(asUpdateCheck({ checkedAt: '5', latest: 3 })).toEqual({})
+})
+
+test('a stored field of the wrong type is never trusted, and junk in the store is fetched again', async () => {
+  const { io, seen } = updateIO({ saved: { checkedAt: 10 * DAY, latest: 42 } })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.toasts.length).toBe(0)
+  const junk = updateIO({ saved: 'junk' })
+  await runUpdateCheck(junk.io, ROOT)
+  expect(junk.seen.fetches.length).toBe(1)
+  expect(junk.seen.toasts.length).toBe(1)
+})
+
+test('the update notice names both versions, the update command, and auto-update', () => {
+  const text = updateNotice('0.3.0', '0.2.0')
+  expect(text).toContain('0.3.0')
+  expect(text).toContain('0.2.0')
+  expect(text).toContain('/glance-update')
+  expect(text).toContain('/reload-plugins')
+  expect(text).toContain('auto-update')
+})
+
+/** A stand-in for the engine under the update check, recording what it did. */
+function updateIO(opts: { latest?: string; ok?: boolean; env?: Record<string, string>; saved?: unknown } = {}) {
+  const seen = { fetches: [] as string[], reads: [] as string[], logs: [] as string[], toasts: [] as string[], slept: 0, saved: opts.saved }
+  const io = {
+    env: async (name: string) => opts.env?.[name],
+    readFile: async (path: string) => (seen.reads.push(path), JSON.stringify({ name: 'glance', version: '0.2.0' })),
+    load: async () => seen.saved,
+    save: async (check: unknown) => {
+      seen.saved = check
+    },
+    fetch: async (url: string) => {
+      seen.fetches.push(url)
+      const ok = opts.ok ?? true
+      return { ok, status: ok ? 200 : 404, text: ok ? JSON.stringify({ version: opts.latest ?? '0.3.0' }) : 'Not Found' }
+    },
+    now: async () => 10 * DAY,
+    sleep: async (ms: number) => {
+      seen.slept += ms
+    },
+    log: (text: string) => void seen.logs.push(text),
+    toast: (text: string) => void seen.toasts.push(text),
+  }
+  return { io, seen }
+}
+
+test('a newer release is fetched once, saved for every window, and shown after a moment', async () => {
+  const { io, seen } = updateIO()
+  await runUpdateCheck(io, ROOT)
+  expect(seen.reads).toEqual([`${ROOT}/.claude-plugin/plugin.json`])
+  expect(seen.fetches).toEqual(['https://raw.githubusercontent.com/rogadev/glance/main/.claude-plugin/plugin.json'])
+  expect(seen.saved).toEqual({ checkedAt: 10 * DAY, latest: '0.3.0' })
+  expect(seen.slept).toBeGreaterThan(0)
+  expect(seen.toasts.length).toBe(1)
+  expect(seen.toasts[0]).toContain('glance 0.3.0 is out (you have 0.2.0)')
+})
+
+test('a check saved today is used without fetching, and still shows the notice', async () => {
+  const { io, seen } = updateIO({ saved: { checkedAt: 10 * DAY - 60_000, latest: '0.3.0' } })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.toasts.length).toBe(1)
+})
+
+test('a check saved yesterday is fetched again', async () => {
+  const { io, seen } = updateIO({ saved: { checkedAt: 9 * DAY - 1, latest: '0.2.0' }, latest: '0.4.0' })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(1)
+  expect(seen.toasts[0]).toContain('glance 0.4.0 is out')
+})
+
+test('an up-to-date glance shows nothing', async () => {
+  const { io, seen } = updateIO({ latest: '0.2.0' })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(1)
+  expect(seen.toasts.length).toBe(0)
+})
+
+test('each update or network setting turns the check off', async () => {
+  for (const name of ['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'DISABLE_AUTOUPDATER', 'DISABLE_UPDATES']) {
+    const { io, seen } = updateIO({ env: { [name]: '1' } })
+    await runUpdateCheck(io, ROOT)
+    expect(seen.fetches.length).toBe(0)
+    expect(seen.toasts.length).toBe(0)
+    expect(seen.logs.some((l) => l.includes('update check off'))).toBe(true)
+  }
+})
+
+test('glance run from a folder of its own never checks', async () => {
+  const { io, seen } = updateIO()
+  await runUpdateCheck(io, '/home/u/src/glance')
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('not a marketplace install'))).toBe(true)
+})
+
+test('a failed fetch is logged, shows nothing, and is tried again next session', async () => {
+  const { io, seen } = updateIO({ ok: false })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.toasts.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('HTTP 404'))).toBe(true)
+  expect(seen.saved).toBe(undefined)
+})
+
+test('a fetch that answers 200 with no version is logged, saves nothing, and is tried again next session', async () => {
+  const { io, seen } = updateIO()
+  io.fetch = async () => ({ ok: true, status: 200, text: '{}' })
+  await runUpdateCheck(io, ROOT)
+  expect(seen.toasts.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('got no version (HTTP 200)'))).toBe(true)
+  expect(seen.saved).toBe(undefined)
+})
+
+test('a glance whose own plugin.json has no version never fetches', async () => {
+  const { io, seen } = updateIO()
+  io.readFile = async () => '{}'
+  await runUpdateCheck(io, ROOT)
+  expect(seen.fetches.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('no version in its own plugin.json'))).toBe(true)
+})
+
+test('a fetch that throws is logged, never thrown', async () => {
+  const { io, seen } = updateIO()
+  io.fetch = async () => {
+    throw new Error('offline')
+  }
+  await runUpdateCheck(io, ROOT)
+  expect(seen.toasts.length).toBe(0)
+  expect(seen.logs.some((l) => l.includes('update check failed: Error: offline'))).toBe(true)
+})
+
+// /glance-update. The CLI's --json failure line is the one `claude plugin
+// update` printed for a plugin it couldn't find (Claude Code 2.1.319).
+const NOT_FOUND_JSON = '{"command":"update","outcome":"failed","plugin":"glance@glance","message":"Plugin \\"glance\\" not found","failureCode":"not_found"}'
+
+test('/glance-update runs claude plugin update for the marketplace glance came from', async () => {
+  const runs: string[][] = []
+  const text = await updateGlance(async (argv) => {
+    runs.push(argv)
+    return { exitCode: 0, stdout: '{"command":"update","outcome":"updated","message":"Updated glance to 0.3.0"}\n', stderr: '' }
+  }, ROOT)
+  expect(runs).toEqual([['claude', 'plugin', 'update', 'glance@glance', '--json']])
+  expect(text).toContain('Updated glance to 0.3.0')
+  expect(text).toContain('/reload-plugins')
+})
+
+test('/glance-update says what failed and how to update by hand', async () => {
+  const text = await updateGlance(async () => ({ exitCode: 1, stdout: NOT_FOUND_JSON + '\n', stderr: '' }), ROOT)
+  expect(text).toContain('Plugin "glance" not found')
+  expect(text).toContain('claude plugin update glance@glance')
+  expect(text).not.toContain('/reload-plugins')
+})
+
+test('/glance-update falls back to stderr when the CLI prints no JSON', async () => {
+  const text = await updateGlance(async () => ({ exitCode: 1, stdout: 'boom', stderr: 'permission denied\n' }), ROOT)
+  expect(text).toContain('the update failed (permission denied)')
+  expect(text).toContain('claude plugin update glance@glance')
+})
+
+test('/glance-update reads the last line of the output, and fills in a missing message', async () => {
+  const last = await updateGlance(
+    async () => ({ exitCode: 0, stdout: 'Checking glance...\n{"outcome":"updated","message":"Updated glance to 0.3.0"}\n', stderr: '' }),
+    ROOT,
+  )
+  expect(last).toContain('Updated glance to 0.3.0')
+  const bare = await updateGlance(async () => ({ exitCode: 0, stdout: '', stderr: '' }), ROOT)
+  expect(bare).toContain('glance is updated')
+  expect(bare).toContain('/reload-plugins')
+  const failed = await updateGlance(async () => ({ exitCode: 1, stdout: '', stderr: '' }), ROOT)
+  expect(failed).toContain('the update failed. ')
+})
+
+test('/glance-update that cannot run the CLI says how to update by hand', async () => {
+  const text = await updateGlance(async () => {
+    throw new Error("failed to start: ENOENT: Command 'claude' not found")
+  }, ROOT)
+  expect(text).toContain("couldn't run the update")
+  expect(text).toContain('claude plugin update glance@glance')
+})
+
+test('/glance-update on a glance run from its own folder runs nothing and says to update the folder', async ($, on) => {
+  const runs: unknown[] = []
+  on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout: '', stderr: '' } }))
+  on('command.run', () => ({ text: 'engine ran it' }))
+  const r = await $.command.run({ command: 'glance-update' })
+  expect(runs.length).toBe(0)
+  expect(r.text).toContain('not a marketplace install')
+  expect(r.text).toContain('git pull')
+})
+
+// session.start: in the test engine $.plugin.root is this folder, not a
+// marketplace install, so the update check stops at that and logs why.
+function sessionEngine(on: Parameters<Parameters<typeof test>[1]>[1], env: (name: string) => Promise<string | undefined>) {
+  const seen = { commands: [] as string[], envs: [] as string[], logs: [] as string[] }
+  on('command.register', (_, e) => (seen.commands.push(e.name), { value: undefined }) as never)
+  on('env.get', (_, e) => (seen.envs.push(e.name), env(e.name).then((value) => ({ value }))) as never)
+  on('ui.log', (_, e) => (seen.logs.push(String(e.text)), { value: undefined }) as never)
+  on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+  return seen
+}
+
+const START = { cwd: '/home/u/project', surface: 'terminal', isInteractive: true } as const
+
+test('an interactive session registers /glance-update and starts the update check', async ($, on) => {
+  const seen = sessionEngine(on, async () => undefined)
+  await $.session.start(START)
+  await new Promise((r) => setTimeout(r, 0))
+  expect(seen.commands).toContain('glance-update')
+  expect(seen.envs).toEqual(['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'DISABLE_AUTOUPDATER', 'DISABLE_UPDATES'])
+  expect(seen.logs.some((l) => l.includes('not a marketplace install'))).toBe(true)
+})
+
+test('each update or network setting reaches the check by its own name', async ($, on) => {
+  const seen = sessionEngine(on, async (name) => (name === 'DISABLE_UPDATES' ? '1' : undefined))
+  await $.session.start(START)
+  await new Promise((r) => setTimeout(r, 0))
+  expect(seen.logs.some((l) => l.includes('update check off (an update or network setting'))).toBe(true)
+})
+
+test('session start never waits on the update check', async ($, on) => {
+  const seen = sessionEngine(on, () => new Promise(() => {}))
+  await $.session.start(START)
+  expect(seen.commands).toContain('glance-update')
+  expect(seen.envs.length).toBe(1)
+})
+
+test('a session nobody is at (claude -p, the SDK) starts no update check', async ($, on) => {
+  const seen = sessionEngine(on, async () => undefined)
+  await $.session.start({ ...START, surface: null, isInteractive: false })
+  await new Promise((r) => setTimeout(r, 0))
+  expect(seen.commands).toContain('glance-update')
+  expect(seen.envs).toEqual([])
+})
+
+test('a command that fails to register never holds up or fails session start', async ($, on) => {
+  const starts: unknown[] = []
+  on('command.register', () => {
+    throw new Error('registry closed')
+  })
+  on('session.start', (_, e) => (starts.push(e), { cwd: e.cwd }) as never)
+  const r = await $.session.start(START)
+  expect(r.cwd).toBe(START.cwd)
+  expect(starts.length).toBe(1)
 })
