@@ -89,6 +89,41 @@ test('GlanceReset saves a snapshot with the diagnosis and only that session log 
   assert.ok(!JSON.stringify(snap).includes('other-se'));
 });
 
+test('a snapshot whose log could not be read says why, instead of showing an empty log', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: 'smoke-5', prompt: 'hi' });
+  const logFile = path.join(state, 'events.log');
+  fs.rmSync(logFile);
+  fs.mkdirSync(logFile);
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: 'smoke-5', live_agents: [] });
+  const snap = JSON.parse(fs.readFileSync(JSON.parse(r.stdout.trim()).snapshot, 'utf8'));
+  assert.deepEqual(snap.log, []);
+  assert.equal(snap.log_error, 'EISDIR');
+});
+
+test('a missing log gives the snapshot an empty log and no error', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: 'smoke-6', prompt: 'hi' });
+  fs.rmSync(path.join(state, 'events.log'));
+  // The reset's own log line lands after the snapshot reads the log.
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: 'smoke-6', live_agents: [] });
+  const snap = JSON.parse(fs.readFileSync(JSON.parse(r.stdout.trim()).snapshot, 'utf8'));
+  assert.deepEqual(snap.log, []);
+  assert.equal(snap.log_error, undefined);
+});
+
+test('a snapshot that cannot be saved is logged, and the summary names no file', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: 'smoke-7', prompt: 'hi' });
+  fs.mkdirSync(path.join(state, 'fix-smoke-7.json'));
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: 'smoke-7', live_agents: [] });
+  assert.equal(JSON.parse(r.stdout.trim()).snapshot, '');
+  assert.match(fs.readFileSync(path.join(state, 'events.log'), 'utf8'), / smoke-7 glance-fix snapshot-failed:/);
+});
+
 test('unparsable input is logged, not dropped silently', (t) => {
   const { dir, state } = home();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

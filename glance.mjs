@@ -558,13 +558,18 @@ function glanceVersion() {
   }
 }
 
-/** The last `max` events.log lines for one session (its id's first 8 characters). */
+/**
+ * Reads the last `max` events.log lines for one session (its id's first 8
+ * characters). A missing log is just empty; any other read failure comes back
+ * as `error`, so the snapshot can say why its log is empty.
+ */
 function sessionLog(sid, max) {
   try {
     const lines = fs.readFileSync(path.join(CONFIG.stateDir, 'events.log'), 'utf8').split('\n');
-    return lines.filter((l) => l.split(' ')[1] === sid).slice(-max);
-  } catch {
-    return [];
+    return { lines: lines.filter((l) => l.split(' ')[1] === sid).slice(-max) };
+  } catch (err) {
+    if (err.code === 'ENOENT') return { lines: [] };
+    return { lines: [], error: err.code || err.message };
   }
 }
 
@@ -597,8 +602,14 @@ function saveSnapshot(input, prev, diagnosis, written, now) {
     live_agents: Array.isArray(input.live_agents) ? input.live_agents.length : 0,
     diagnosis,
     paint: written,
-    log: sessionLog(sid, 40),
   };
+  const recent = sessionLog(sid, 40);
+  snapshot.log = recent.lines;
+  if (recent.error) {
+    // Usually unwritable too, so log() may drop this; the snapshot keeps it.
+    snapshot.log_error = recent.error;
+    log(`${snapshot.at} ${sid} glance-fix log-unreadable:${recent.error}`);
+  }
   try {
     fs.writeFileSync(file, JSON.stringify(snapshot, null, 2));
     return file;
