@@ -117,30 +117,50 @@ export function describeCheck(stdout: string): string {
 // The surface the prompt band last drew on, for /glance-check's report.
 let lastSurface = 'unknown'
 
-// Set once glance.mjs can't be started (most often: no `node` on PATH), so
-// the warning shows once per load instead of on every event.
+// Set once `node` can't be started, so the warning shows once per load
+// instead of on every event.
 let warned = false
+
+/**
+ * Whether a `$.process.run` rejection means the command could not start (for
+ * `node`: not installed or not on PATH), as opposed to a run that timed out.
+ * The engine's rejection carries no code, only its message: "... failed to
+ * start: ENOENT: ..." or "... aborted: still running after 5000ms".
+ */
+export function cannotStart(err: unknown): boolean {
+  return err != null && /failed to start|ENOENT/.test(String(err))
+}
 
 /** Runs glance.mjs with one event on stdin. Never throws. */
 async function glance($: EngineInterface, input: object) {
+  let r
   try {
-    const r = await $.process.run(['node', `${$.plugin.root}/glance.mjs`], {
+    r = await $.process.run(['node', `${$.plugin.root}/glance.mjs`], {
       stdin: JSON.stringify({ ...input, glance_via: 'mod' }),
       timeoutMs: 5000,
     })
-    if (r.exitCode !== 0) $.ui.log(`glance: exit ${r.exitCode}: ${r.stderr.slice(0, 200)}`, { to: 'debug' })
-    const next = parsePane(r.stdout)
-    if (next) await update($, pane, () => next)
-    else $.ui.log(`glance: no state line from glance.mjs: ${r.stdout.slice(0, 200)}`, { to: 'debug' })
-    return r
   } catch (err: unknown) {
+    // A slow run (a busy machine) is not a missing Node.js: the next event
+    // repaints, so it goes to the debug log only.
     $.ui.log(`glance: could not run glance.mjs: ${String(err)}`, { to: 'debug' })
-    if (!warned) {
+    if (cannotStart(err) && !warned) {
       warned = true
       $.ui.toast('glance could not start Node.js, so the pane tint is off. Install Node.js 20 or later and restart Claude.')
     }
     return undefined
   }
+  if (r.exitCode !== 0) $.ui.log(`glance: exit ${r.exitCode}: ${r.stderr.slice(0, 200)}`, { to: 'debug' })
+  const next = parsePane(r.stdout)
+  if (!next) {
+    $.ui.log(`glance: no state line from glance.mjs: ${r.stdout.slice(0, 200)}`, { to: 'debug' })
+    return r
+  }
+  try {
+    await update($, pane, () => next)
+  } catch (err: unknown) {
+    $.ui.log(`glance: could not save the pane state for the band: ${String(err)}`, { to: 'debug' })
+  }
+  return r
 }
 
 // The engine's isWorking as the prompt band last saw it, so only changes are

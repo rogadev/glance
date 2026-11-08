@@ -113,7 +113,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 
 ## Safety nets
 
-- Every mod hook fails open: if `glance.mjs` errors, hangs, or Node is missing, Claude carries on as if glance weren't installed. A missing Node shows one notice per session; everything else goes to the debug log (`claude --debug`).
+- Every mod hook fails open: if `glance.mjs` errors, hangs, or Node is missing, Claude carries on as if glance weren't installed. A missing Node shows one notice per session; everything else, including a run that takes over 5 seconds on a busy machine, goes to the debug log only (`claude --debug`), and the next event repaints.
 - Background work with no end signal expires: agents after 4 hours (`CONFIG.agentTtlMs`), shells after 1 hour (`CONFIG.shellTtlMs`), so a dev server left running can't hold the tint for long. `/glance-fix` clears it at once.
 - Scheduled runs count only when due within an hour (`SCHEDULE_HORIZON_MS` in `schedule.mjs`), so a job set for tomorrow morning doesn't keep the pane tinted overnight. A run that's later than its allowance (2 minutes, or up to half the period plus 2 minutes for a recurring cron) counts as missed: a recurring cron moves on, anything else ends.
 - (With `CONFIG.titleWatcher` on.) The title watcher clears a working pane that is really idle (Esc, or any other missed end of turn) within about 3 seconds.
@@ -155,6 +155,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - A background dev server left running holds the tint for up to an hour after the turn ends (the shell TTL), unless you run `/glance-fix`.
 - After you approve a permission prompt, the pane stays on needs-you until that tool finishes, so a long approved command looks idle. No event marks the approval: `tool.check` runs before the prompt, and `ui.press` and `ui.select` only cover components a plugin draws.
 - Agent teams are untested: whether teammates send `SubagentStart`, and what `TeammateIdle` should mean for the lead's pane. `TaskCreated` and `TaskCompleted` are task-list events, not busy signals, so glance ignores them. `PermissionDenied` (a rule or auto mode refusing a tool) needs nothing: Claude keeps working.
+- (2026-11-08, 2.1.319) `$.process.run` rejects with a `HooksError` that has no `code`, only a message. A command that isn't found: `$.process.run(<cmd>) failed to start: ENOENT: Command '<cmd>' not found or is in an unsafe location (current directory)`. A run past `timeoutMs`: `$.process.run(<cmd>) aborted: still running after <n>ms`. The mod tells a missing Node from a slow run by that message (a probe mod run with `claude -p --plugin-dir`). In `claude plugin test`, a `process.run` hook that throws is skipped and the call rejects with `no implementation for process.run`; return `{ deny: <message> }` to make it reject with a given message.
 - The title watcher depends on Claude Code's title glyphs. If a release changes them, `TitleIdle` stops firing. The log shows whether `TitleIdle` lines still appear.
 
 ## Contributing

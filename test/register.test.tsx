@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { describeCheck, parsePane } from '../hooks/register'
+import { cannotStart, describeCheck, parsePane } from '../hooks/register'
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
 function engine(on: Parameters<Parameters<typeof test>[1]>[1], runs: any[], stdout = '') {
@@ -254,15 +254,52 @@ test('a glance.mjs that cannot start never holds Claude up, and warns once', asy
   const stops: unknown[] = []
   const toasts: unknown[] = []
   on('session.id', () => ({ value: 'sess-1' }))
-  on('process.run', () => {
-    throw new Error('spawn node ENOENT')
-  })
+  on('process.run', () => ({ deny: NOT_FOUND }) as never)
   on('ui.toast', (_, e) => (toasts.push(e), { value: undefined }) as never)
   on('classic.Stop', (_, e) => (stops.push(e), {}))
   await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
   await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
   expect(stops.length).toBe(2)
   expect(toasts.length).toBe(1)
+  expect(JSON.stringify(toasts[0])).toContain('Node.js')
+})
+
+// The engine's own wording, from a probe mod (Claude Code 2.1.319). A hook's
+// { deny } makes $.process.run reject with it; a thrown error would not.
+const NOT_FOUND = "glance: $.process.run(node) failed to start: ENOENT: Command 'node' not found or is in an unsafe location (current directory)"
+const TIMED_OUT = 'glance: $.process.run(node) aborted: still running after 5000ms'
+
+test('a glance.mjs run that times out never blames Node.js, and is logged', async ($, on) => {
+  const toasts: unknown[] = []
+  const logs: string[] = []
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ deny: TIMED_OUT }) as never)
+  on('ui.toast', (_, e) => (toasts.push(e), { value: undefined }) as never)
+  on('ui.log', (_, e) => (logs.push(e.text), { value: undefined }) as never)
+  on('classic.Stop', () => ({}))
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  expect(toasts.length).toBe(0)
+  expect(logs.some((l) => l.includes('still running after 5000ms'))).toBe(true)
+})
+
+test('a timeout does not use up the missing-Node.js notice', async ($, on) => {
+  const toasts: unknown[] = []
+  let calls = 0
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ deny: ++calls === 1 ? TIMED_OUT : NOT_FOUND }) as never)
+  on('ui.toast', (_, e) => (toasts.push(e), { value: undefined }) as never)
+  on('classic.Stop', () => ({}))
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  expect(toasts.length).toBe(1)
+  expect(JSON.stringify(toasts[0])).toContain('Node.js')
+})
+
+test('only a command that cannot start counts as a missing Node.js', () => {
+  expect(cannotStart(new Error(NOT_FOUND))).toBe(true)
+  expect(cannotStart(new Error(TIMED_OUT))).toBe(false)
+  expect(cannotStart(new Error('something else'))).toBe(false)
+  expect(cannotStart(undefined)).toBe(false)
 })
 
 test('/glance-check names the step that failed, and warns when the pane may be left busy', async () => {
