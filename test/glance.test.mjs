@@ -332,6 +332,27 @@ test('/glance-fix reports a missed agent end ahead of a stale shell', () => {
   assert.equal(d.suspect, true);
 });
 
+test('/glance-fix reports a stale shell ahead of an agent that is still running', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('dev'), sub('SubagentStart', 'alive'), main('Stop')]);
+  const d = diagnoseReset(s, main('GlanceReset', { live_agents: ['alive'] }), s.updatedAt + MIN);
+  assert.equal(d.verdict, 'stale-background');
+  assert.equal(d.suspect, false);
+});
+
+test('/glance-fix with no agent list counts every tracked agent as gone', () => {
+  const stuck = run([main('UserPromptSubmit'), sub('SubagentStart', 'gone'), main('Stop')]);
+  const d = diagnoseReset(stuck, main('GlanceReset'), stuck.updatedAt + MIN);
+  assert.equal(d.verdict, 'missed-agent-end');
+});
+
+test('/glance-fix leaves out when the state was set if it never was', () => {
+  const s = { ...emptyState(), state: WORKING, reason: 'tool', updatedAt: 0 };
+  const d = diagnoseReset(s, main('GlanceReset', { live_agents: [] }), Date.UTC(2026, 10, 8));
+  assert.equal(d.verdict, 'missed-end');
+  assert.match(d.cause, /\(tool\)/);
+  assert.doesNotMatch(d.cause, /, set /);
+});
+
 test('/glance-fix on a pane glance already had as needs you points at painting', () => {
   const s = run([main('UserPromptSubmit'), main('Stop')]);
   const d = diagnoseReset(s, main('GlanceReset', { live_agents: [] }), s.updatedAt + MIN);

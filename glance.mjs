@@ -97,9 +97,12 @@ function liveBackground(prev, now) {
   return live;
 }
 
-/** "42 min ago", for /glance-fix's diagnosis. */
+/** Rounds a span in milliseconds to whole minutes. */
+const minutes = (ms) => Math.round(ms / 60000);
+
+/** Formats a span as "42 min ago", for /glance-fix's diagnosis. */
 function ago(ms) {
-  const min = Math.round(ms / 60000);
+  const min = minutes(ms);
   return min < 1 ? 'under a minute ago' : `${min} min ago`;
 }
 
@@ -121,7 +124,7 @@ export function diagnoseReset(prev, input, now) {
       if (live.has(id)) running++;
       else lost.push(id);
     } else {
-      const due = Math.round((item.dueAt - now) / 60000);
+      const due = minutes(item.dueAt - now);
       const since = item.kind === 'shell' ? `started ${ago(now - item.at)}` : due >= 0 ? `due in ${due} min` : `due ${-due} min ago`;
       stale.push(`${item.kind} ${id} (${since})`);
     }
@@ -585,8 +588,8 @@ function saveSnapshot(input, prev, diagnosis, written, now) {
   const background = Object.entries(liveBackground(prev, now)).map(([id, item]) => ({
     id,
     kind: item.kind,
-    ...(item.at ? { started_min_ago: Math.round((now - item.at) / 60000) } : {}),
-    ...(item.dueAt ? { due_in_min: Math.round((item.dueAt - now) / 60000) } : {}),
+    ...(item.at ? { started_min_ago: minutes(now - item.at) } : {}),
+    ...(item.dueAt ? { due_in_min: minutes(item.dueAt - now) } : {}),
   }));
   const snapshot = {
     at: new Date(now).toISOString(),
@@ -597,7 +600,7 @@ function saveSnapshot(input, prev, diagnosis, written, now) {
     before: {
       state: prev.state,
       reason: prev.reason,
-      set_min_ago: prev.updatedAt ? Math.round((now - prev.updatedAt) / 60000) : null,
+      set_min_ago: prev.updatedAt ? minutes(now - prev.updatedAt) : null,
       background,
     },
     live_agents: Array.isArray(input.live_agents) ? input.live_agents.length : 0,

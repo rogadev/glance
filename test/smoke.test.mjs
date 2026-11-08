@@ -63,12 +63,49 @@ test('GlanceReset prints the summary /glance-fix shows', (t) => {
     tool_response: { backgroundTaskId: 'devserver' },
   });
   hook(dir, { hook_event_name: 'Stop', session_id: sid });
-  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: [] });
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: ['a1', 'a2'] });
   const summary = JSON.parse(r.stdout.trim());
   assert.equal(summary.was, 'working [background-running]');
   assert.deepEqual(summary.dropped, ['shell devserver']);
   assert.deepEqual(summary.kept, []);
   assert.equal(summary.diagnosis.verdict, 'stale-background');
+  // The snapshot keeps the background work and the agent count, which the
+  // report skill reads as evidence.
+  const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
+  assert.deepEqual(snap.before.background, [{ id: 'devserver', kind: 'shell', started_min_ago: 0 }]);
+  assert.equal(snap.live_agents, 2);
+});
+
+test('a snapshot gives a scheduled wakeup the minutes until it is due', (t) => {
+  const { dir } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-8';
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
+  hook(dir, {
+    hook_event_name: 'PostToolUse',
+    session_id: sid,
+    tool_name: 'ScheduleWakeup',
+    tool_input: { prompt: 'check CI' },
+    tool_response: { scheduledFor: Date.now() + 20 * 60 * 1000 },
+  });
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: [] });
+  const snap = JSON.parse(fs.readFileSync(JSON.parse(r.stdout.trim()).snapshot, 'utf8'));
+  const wakeup = snap.before.background.find((b) => b.kind === 'wakeup');
+  assert.ok(wakeup, `no wakeup in ${JSON.stringify(snap.before.background)}`);
+  assert.ok(wakeup.due_in_min >= 19 && wakeup.due_in_min <= 20, `due_in_min ${wakeup.due_in_min}`);
+});
+
+test("a snapshot keeps only the session's newest 40 log lines", (t) => {
+  const { dir } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-9';
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
+  for (let i = 0; i < 43; i++) hook(dir, { hook_event_name: 'PreToolUse', session_id: sid, tool_name: 'Bash' });
+  hook(dir, { hook_event_name: 'PreToolUse', session_id: sid, tool_name: 'Read' });
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: [] });
+  const snap = JSON.parse(fs.readFileSync(JSON.parse(r.stdout.trim()).snapshot, 'utf8'));
+  assert.equal(snap.log.length, 40);
+  assert.match(snap.log[39], /PreToolUse \(Read/);
 });
 
 test('GlanceReset saves a snapshot with the diagnosis and only that session log lines', (t) => {
