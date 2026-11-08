@@ -718,14 +718,66 @@ test('/glance-update that cannot run the CLI says how to update by hand', async 
   expect(text).toContain('claude plugin update glance@glance')
 })
 
-test('/glance-update on a glance run from its own folder runs nothing and says to update the folder', async ($, on) => {
-  const runs: unknown[] = []
-  on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout: '', stderr: '' } }))
+// A glance run from a clone of its own updates with git instead.
+const CLONE = String.raw`C:\Users\u\Documents\GitHub\glance`
+const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '' })
+
+test('/glance-update on a clone pulls it fast-forward only, and says to reload', async () => {
+  const runs: string[][] = []
+  const text = await updateGlance(async (argv) => {
+    runs.push(argv)
+    return argv.includes('rev-parse') ? ok('true\n') : ok('Updating 4ab1ca9..9f00d1e\nFast-forward\n glance.mjs | 2 +-\n')
+  }, CLONE)
+  expect(runs).toEqual([
+    ['git', '-C', CLONE, 'rev-parse', '--is-inside-work-tree'],
+    ['git', '-C', CLONE, 'pull', '--ff-only'],
+  ])
+  expect(text).toContain('pulled the latest glance')
+  expect(text).toContain('/reload-plugins')
+})
+
+test('/glance-update on a clone that is current says so', async () => {
+  const text = await updateGlance(async (argv) => (argv.includes('rev-parse') ? ok('true\n') : ok('Already up to date.\n')), CLONE)
+  expect(text).toContain('already up to date')
+  expect(text).not.toContain('/reload-plugins')
+})
+
+test('/glance-update on a clone whose pull fails says why and how to update by hand', async () => {
+  const text = await updateGlance(
+    async (argv) =>
+      argv.includes('rev-parse') ? ok('true\n') : { exitCode: 128, stdout: '', stderr: '\nfatal: Not possible to fast-forward, aborting.\n' },
+    CLONE,
+  )
+  expect(text).toContain('git pull in')
+  expect(text).toContain('(fatal: Not possible to fast-forward, aborting.)')
+  expect(text).toContain('by hand')
+})
+
+test('/glance-update on a folder that is not a git clone pulls nothing', async () => {
+  const runs: string[][] = []
+  const text = await updateGlance(async (argv) => {
+    runs.push(argv)
+    return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
+  }, CLONE)
+  expect(runs.length).toBe(1)
+  expect(text).toContain("isn't a git clone")
+})
+
+test('/glance-update on a clone without git says how to update by hand', async () => {
+  const text = await updateGlance(async () => {
+    throw new Error("failed to start: ENOENT: Command 'git' not found")
+  }, CLONE)
+  expect(text).toContain("git couldn't run there")
+  expect(text).toContain('by hand')
+})
+
+test('/glance-update from the engine runs git for a glance run from its own folder', async ($, on) => {
+  const runs: any[] = []
+  on('process.run', (_, e) => (runs.push(e), { value: ok(e.argv.includes('rev-parse') ? 'true\n' : 'Already up to date.\n') }))
   on('command.run', () => ({ text: 'engine ran it' }))
   const r = await $.command.run({ command: 'glance-update' })
-  expect(runs.length).toBe(0)
-  expect(r.text).toContain('not a marketplace install')
-  expect(r.text).toContain('git pull')
+  expect(runs.map((e) => e.argv[0])).toEqual(['git', 'git'])
+  expect(r.text).toContain('already up to date')
 })
 
 // session.start: in the test engine $.plugin.root is this folder, not a

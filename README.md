@@ -39,6 +39,8 @@ Without auto-update, glance tells you itself. At the start of a session it check
 
 The check reads one small file from GitHub and sends nothing about you. It stays off when `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `DISABLE_AUTOUPDATER`, or `DISABLE_UPDATES` is set, the settings that turn off Claude Code's own update checks, and when glance runs from a folder of its own (`--plugin-dir`) instead of a marketplace install.
 
+If you run glance from a clone of this repo (with `--plugin-dir` or `CLAUDE_CODE_PLUGIN_DIRS`), `/glance-update` runs `git pull --ff-only` in that folder instead, then tells you to run `/reload-plugins`. A fast-forward-only pull never merges or rewrites your own commits: if your clone has changes git can't fast-forward past, the pull stops and glance says why, so you can sort it out by hand. Folders that aren't git clones aren't touched.
+
 ## Where it works
 
 glance paints the terminal window Claude Code runs in, so what matters is the window (and anything in between, such as tmux), not your shell: PowerShell, cmd, Git Bash, zsh, and fish inside the same window all behave the same.
