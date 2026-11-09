@@ -7,6 +7,10 @@
 * change the standby tint to dark purple (#29203B) ([1842ef0](https://github.com/rogadev/glance/commit/1842ef05347bd6a045a87dbf98427b441e9882aa))
 * add /glance-color to show and change the working and standby colors ([c93016d](https://github.com/rogadev/glance/commit/c93016dd4e9873b4cca55be3a0a5079a4a2dbe0e))
 
+### Bug Fixes
+
+* show needs you when a turn ends with only a dev server or a plugin's monitor running ([de3aede](https://github.com/rogadev/glance/commit/de3aede7f37d714899de24f21bd8d41ff6fc0608))
+
 ## [0.5.0](https://github.com/rogadev/glance/compare/v0.4.0...v0.5.0) (2026-11-09)
 
 ### Features
