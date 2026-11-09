@@ -200,13 +200,15 @@ const P = {
     project: 'dashboard',
     state: 'standby',
     items: [
-      { user: 'Make the chart tooltips follow the cursor.' },
-      '',
-      { tool: 'Bash', arg: 'npm run dev', out: 'Running in the background (↓ to manage)' },
+      { user: 'Make the chart tooltips follow the cursor, then /land it.' },
       '',
       { tool: 'Update', arg: 'src/charts/Tooltip.tsx', out: 'Added 27 lines, removed 9 lines' },
       '',
-      { say: 'The tooltips now follow the cursor and show both series. The dev server is still up at http://localhost:5173.' },
+      { ran: 'Ran 2 shell commands' },
+      '',
+      { tool: 'Bash', arg: 'gh pr checks 42 --watch', out: 'Running in the background (↓ to manage)' },
+      '',
+      { say: "Pushed and opened #42. CI is running; I'll merge it once the checks pass." },
       '',
       { done: 'Worked for 4m 18s' },
     ],
@@ -386,7 +388,7 @@ function desktop({ file, title, cols, panes }) {
 
 const LEGEND = {
   working: ['Working', 'Claude, a subagent, or a scheduled run is busy'],
-  standby: ['Standing by', 'only a background shell, such as a dev server, runs'],
+  standby: ['Standing by', 'Claude is waiting on CI or another watch to finish'],
   attention: ['Needs you', 'your normal background: a question, a prompt, or done'],
 }
 

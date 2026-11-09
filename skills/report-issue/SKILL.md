@@ -54,7 +54,7 @@ Then run these yourself (adjust the shell to the user's system):
 Read `README.md` in the plugin root before deciding anything. In particular:
 
 - **Where it works:** the table of terminals and their status. A terminal marked Unknown that doesn't show the tint is a support report, not a code bug. File it as one, with the `/glance-check` report, which is useful to the maintainers.
-- **Event table and Safety nets:** what glance does on each event, and the designed limits. For example, a background shell holds the purple standby tint (never the working color) until it ends, for up to an hour, a pane stays on "needs you" after you approve a permission prompt until that tool finishes, and `/glance-fix` clears tracked background work. If the symptom is one of these, explain it to the user and suggest the documented fix instead of filing. Offer to file a feature request only if they want the behavior changed.
+- **Event table and Safety nets:** what glance does on each event, and the designed limits. For example, a CI watch or poll Claude is waiting on holds the purple standby tint (never the working color) until it ends, for up to an hour, while a dev server never does, a pane stays on "needs you" after you approve a permission prompt until that tool finishes, and `/glance-fix` clears tracked background work. If the symptom is one of these, explain it to the user and suggest the documented fix instead of filing. Offer to file a feature request only if they want the behavior changed.
 - **Things verified by experiment:** known Claude Code behaviors glance depends on.
 
 Then search for duplicates, open and closed:

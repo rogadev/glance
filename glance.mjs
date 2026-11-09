@@ -175,9 +175,32 @@ export function endedTaskIds(prompt) {
 const SCHEDULED = new Set(['wakeup', 'cron']);
 
 // Background work that is Claude itself working, so it holds the working
-// color. Anything else that isn't scheduled (a shell, a monitor) only holds
-// the standby color: it may be a dev server nobody is waiting on.
+// color. A shell or a monitor holds the standby color only when Claude started
+// it to wait on something (see waitsFor); anything else, such as a dev server
+// or a plugin's own monitor, leaves a finished turn on needs you.
 const ACTIVE = new Set(['agent', 'workflow']);
+
+// Shell commands that wait for something and then end, so Claude is resumed
+// when they do: a CI watch (/land runs `gh pr checks --watch`), or a poll loop.
+// Not a bare --watch, which also starts file watchers (tsc --watch) that never end.
+const WAIT_COMMANDS = [
+  /\bgh\s+(?:pr\s+checks|run\s+watch)\b[^|;&]*(?:--watch|\bwatch\b)/,
+  /\bgh\s+run\s+watch\b/,
+  /\b(?:until|while)\b[\s\S]*\bsleep\b/,
+  /^\s*sleep\s+\d/,
+  /\bkubectl\s+rollout\s+status\b/,
+];
+
+/**
+ * True when a background shell command waits for something and then ends,
+ * rather than running until stopped (a dev server, a file watcher).
+ *
+ * @param {unknown} command The shell's command line.
+ * @returns {boolean}
+ */
+export function waitsFor(command) {
+  return typeof command === 'string' && WAIT_COMMANDS.some((re) => re.test(command));
+}
 
 // What glance calls the task types Claude Code lists in background_tasks.
 const TASK_KINDS = { subagent: 'agent' };
@@ -359,9 +382,13 @@ function holdsWorking(background, now) {
   return Object.values(background).some((item) => (SCHEDULED.has(item.kind) ? scheduleHoldsTint(item, now) : ACTIVE.has(item.kind)));
 }
 
-/** True when a background shell, or another task that isn't Claude working, is live. */
+/**
+ * True when a live shell or monitor is one Claude started to wait on (a CI
+ * watch, a poll), so it will resume Claude when it ends. One glance only
+ * learned of from background_tasks, or one that runs until stopped, doesn't count.
+ */
 function holdsStandby(background) {
-  return Object.values(background).some((item) => !SCHEDULED.has(item.kind) && !ACTIVE.has(item.kind));
+  return Object.values(background).some((item) => !SCHEDULED.has(item.kind) && !ACTIVE.has(item.kind) && item.waits === true);
 }
 
 /** Records or clears scheduled runs from the tools that manage them. */
@@ -462,7 +489,11 @@ export function decide(prev, input, now) {
     case 'PostToolUseFailure':
     case 'ElicitationResult': {
       const shellId = input.tool_response?.backgroundTaskId;
-      if (shellId) background[shellId] = { kind: 'shell', at: now };
+      if (shellId) background[shellId] = { kind: 'shell', at: now, waits: waitsFor(input.tool_input?.command) };
+      // A monitor Claude starts waits for events that resume it, unless it's
+      // persistent (one that runs for the whole session, like a log tail).
+      const monitorId = input.tool_name === 'Monitor' && event === 'PostToolUse' ? input.tool_response?.taskId : undefined;
+      if (monitorId) background[monitorId] = { kind: 'monitor', at: now, waits: input.tool_response.persistent !== true };
       // A shell stopped with TaskStop gets no task notification, so its
       // PostToolUse is the only sign it ended. A failed stop keeps it.
       if (event === 'PostToolUse' && STOP_TOOLS.has(input.tool_name)) {

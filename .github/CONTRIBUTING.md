@@ -6,7 +6,7 @@ To change glance's code, see [Contributing](../README.md#contributing) in the RE
 
 A good glance issue lets a maintainer see what happened without asking you anything. Before you file, check these:
 
-1. **Is it a known limit?** The README's [Event table](../README.md#event-table) and [Safety nets](../README.md#safety-nets) describe what glance does on purpose. For example, a background shell such as a dev server keeps the pane on the purple standby tint while it runs, for up to an hour, and `/glance-fix` clears it.
+1. **Is it a known limit?** The README's [Event table](../README.md#event-table) and [Safety nets](../README.md#safety-nets) describe what glance does on purpose. For example, a CI watch Claude is waiting on keeps the pane on the purple standby tint while it runs, for up to an hour, and `/glance-fix` clears it. A dev server left running doesn't.
 2. **Is your terminal supported?** See [Where it works](../README.md#where-it-works). If yours is marked Unknown and doesn't show the tint, file a terminal support report: that's useful too.
 3. **Is it already filed?** Search [open and closed issues](https://github.com/rogadev/glance/issues?q=is%3Aissue). If a closed issue fixed it, update glance (`/plugin update glance`) and check again.
 

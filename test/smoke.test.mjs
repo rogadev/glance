@@ -60,19 +60,20 @@ test('GlanceReset prints the summary /glance-fix shows', (t) => {
     hook_event_name: 'PostToolUse',
     session_id: sid,
     tool_name: 'Bash',
-    tool_response: { backgroundTaskId: 'devserver' },
+    tool_input: { run_in_background: true, command: 'gh pr checks 19 --watch' },
+    tool_response: { backgroundTaskId: 'ciwatch' },
   });
   hook(dir, { hook_event_name: 'Stop', session_id: sid });
   const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: ['a1', 'a2'] });
   const summary = JSON.parse(r.stdout.trim());
   assert.equal(summary.was, 'standby [shell-running]');
-  assert.deepEqual(summary.dropped, ['shell devserver']);
+  assert.deepEqual(summary.dropped, ['shell ciwatch']);
   assert.deepEqual(summary.kept, []);
   assert.equal(summary.diagnosis.verdict, 'stale-background');
   // The snapshot keeps the background work and the agent count, which the
   // report skill reads as evidence.
   const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
-  assert.deepEqual(snap.before.background, [{ id: 'devserver', kind: 'shell', started_min_ago: 0 }]);
+  assert.deepEqual(snap.before.background, [{ id: 'ciwatch', kind: 'shell', started_min_ago: 0 }]);
   assert.equal(snap.live_agents, 2);
 });
 
@@ -81,13 +82,13 @@ test('Stop reconciles with the task list Claude Code sends, and the state line a
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const sid = 'smoke-10';
   hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
-  for (const id of ['devserver', 'finished']) {
-    hook(dir, { hook_event_name: 'PostToolUse', session_id: sid, tool_name: 'Bash', tool_response: { backgroundTaskId: id } });
+  for (const id of ['ciwatch', 'finished']) {
+    hook(dir, { hook_event_name: 'PostToolUse', session_id: sid, tool_name: 'Bash', tool_input: { command: 'gh pr checks 19 --watch' }, tool_response: { backgroundTaskId: id } });
   }
   const r = hook(dir, {
     hook_event_name: 'Stop',
     session_id: sid,
-    background_tasks: [{ id: 'devserver', type: 'shell', status: 'running', description: 'dev', command: 'pnpm dev' }],
+    background_tasks: [{ id: 'ciwatch', type: 'shell', status: 'running', description: 'CI', command: 'gh pr checks 19 --watch' }],
     session_crons: [],
     glance_via: 'mod',
   });
@@ -101,7 +102,7 @@ test('Stop reconciles with the task list Claude Code sends, and the state line a
   const summary = JSON.parse(fix.stdout.trim());
   assert.equal(summary.diagnosis.verdict, 'background-running');
   const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
-  assert.deepEqual(snap.before.background, [{ id: 'devserver', kind: 'shell', started_min_ago: 0, listed_running_min_ago: 0 }]);
+  assert.deepEqual(snap.before.background, [{ id: 'ciwatch', kind: 'shell', started_min_ago: 0, listed_running_min_ago: 0 }]);
 });
 
 test('a Tick clears a standby pane whose shell expired, with no other event', (t) => {
@@ -337,7 +338,7 @@ test('GlanceColor saves a color that the next event in any session paints with',
     hook_event_name: 'PostToolUse',
     session_id: sid,
     tool_name: 'Bash',
-    tool_input: { run_in_background: true },
+    tool_input: { run_in_background: true, command: 'gh pr checks 19 --watch' },
     tool_response: { backgroundTaskId: 'b1' },
   });
   const stop = hook(dir, { hook_event_name: 'Stop', session_id: sid, glance_via: 'mod', background_tasks: [{ id: 'b1', type: 'shell' }] });

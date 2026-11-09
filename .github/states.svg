@@ -82,18 +82,20 @@
 <line x1="932.3333333333335" x2="942.3333333333335" y1="40" y2="40" stroke="#8B8B8B" stroke-width="1" fill="none"/>
 <rect x="978.3333333333335" y="35" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
 <path d="M1024.3333333333335 35 L1034.3333333333335 45 M1034.3333333333335 35 L1024.3333333333335 45" stroke="#8B8B8B" stroke-width="1" fill="none"/>
-<rect x="552.6666666666667" y="71" width="494.66666666666674" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="560.6666666666667" y="84" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Make the chart tooltips follow the cursor.</tspan></text>
+<rect x="552.6666666666667" y="71" width="494.66666666666674" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="560.6666666666667" y="84" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Make the chart tooltips follow the cursor, then /land it.</tspan></text>
 
-<text x="560.6666666666667" y="120" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm run dev)</tspan></text>
-<text x="560.6666666666667" y="138" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Running in the background (↓ to manage)</tspan></text>
+<text x="560.6666666666667" y="120" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/charts/Tooltip.tsx)</tspan></text>
+<text x="560.6666666666667" y="138" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 27 lines, removed 9 lines</tspan></text>
 
-<text x="560.6666666666667" y="174" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/charts/Tooltip.tsx)</tspan></text>
-<text x="560.6666666666667" y="192" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 27 lines, removed 9 lines</tspan></text>
+<text x="560.6666666666667" y="174" xml:space="preserve"><tspan fill="#8B8B8B">  Ran 2 shell commands</tspan></text>
 
-<text x="560.6666666666667" y="228" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">The tooltips now follow the cursor and show both series. The</tspan></text>
-<text x="560.6666666666667" y="246" xml:space="preserve"><tspan fill="#CCCCCC">  </tspan><tspan fill="#CCCCCC">dev server is still up at http://localhost:5173.</tspan></text>
+<text x="560.6666666666667" y="210" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(gh pr checks 42 --watch)</tspan></text>
+<text x="560.6666666666667" y="228" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Running in the background (↓ to manage)</tspan></text>
 
-<text x="560.6666666666667" y="282" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 4m 18s</tspan></text>
+<text x="560.6666666666667" y="264" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">Pushed and opened #42. CI is running; I'll merge it once the</tspan></text>
+<text x="560.6666666666667" y="282" xml:space="preserve"><tspan fill="#CCCCCC">  </tspan><tspan fill="#CCCCCC">checks pass.</tspan></text>
+
+<text x="560.6666666666667" y="318" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 4m 18s</tspan></text>
 <line x1="560.6666666666667" x2="1039.3333333333335" y1="346" y2="346" stroke="#5A5A5A" stroke-width="1"/>
 <text x="560.6666666666667" y="368" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
 <line x1="560.6666666666667" x2="1039.3333333333335" y1="382" y2="382" stroke="#5A5A5A" stroke-width="1"/>
@@ -102,7 +104,7 @@
 <rect x="545.1666666666667" y="20.5" width="509.6666666666667" height="399" rx="6" fill="none" stroke="#3C3C3C"/>
 <rect x="544.6666666666667" y="438" width="34" height="34" rx="6" fill="#29203B" stroke="#6A6A6A"/>
 <text x="590.6666666666667" y="452" fill="#EEEEEE" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Standing by</text>
-<text x="590.6666666666667" y="470" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">only a background shell, such as a dev server, runs</text>
+<text x="590.6666666666667" y="470" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">Claude is waiting on CI or another watch to finish</text>
 <clipPath id="clip-1069_3333333333335-20"><rect x="1069.3333333333335" y="20" width="510.6666666666667" height="400" rx="6"/></clipPath>
 <g clip-path="url(#clip-1069_3333333333335-20)">
 <rect x="1069.3333333333335" y="20" width="510.6666666666667" height="400" fill="#0C0C0C"/>
