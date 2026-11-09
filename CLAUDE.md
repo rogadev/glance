@@ -27,7 +27,7 @@ On the maintainer's machine this folder is also the live install: `CLAUDE_CODE_P
 - `types/index.d.ts`: the mod's state shape (`Pane`), registered with the engine through `PluginState`.
 - `paint.cs`: source of `paint.exe`, the console painter and the per-session title watcher (`--watch`). `build.ps1`: rebuilds it with the `csc.exe` that ships with Windows.
 - `.claude-plugin/`: `plugin.json` (CI's `version` job bumps its version) and `marketplace.json` (what `/plugin install glance --marketplace rogadev/glance` reads).
-- `.github/workflows/`: `ci.yml` (tests on three systems, plugin checks, `paint.exe` check, the dev-only-into-main guard, the `version` job, and the `ci ok` check the branch rules require) and `release.yml` (tags and publishes the release when a version reaches `main`). `.github/scripts/release.mjs`: the version and changelog rules both run (tests: `test/release.test.mjs`).
+- `.github/workflows/`: `ci.yml` (tests on three systems, plugin checks, `paint.exe` check, the dev-only-into-main guard, the `version` job, and the `ci ok` check the branch rules require) and `release.yml` (tags and publishes the release when a version reaches `main`). `.github/scripts/release.mjs`: the version and changelog rules both run (tests: `test/release.test.mjs`). `.github/scripts/preview.mjs`: builds `.github/preview.svg`, the README's picture of six panes, with the tints from `CONFIG`; rerun it after changing a color.
 - State and log: `~/.claude/state/glance/` (`<session_id>.json`, `<session_id>.watch` with the watcher pid, `fix-<session_id>.json` from `/glance-fix`, `events.log`).
 
 ## History

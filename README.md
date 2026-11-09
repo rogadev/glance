@@ -2,6 +2,8 @@
 
 glance tints your terminal pane while Claude Code is working and puts it back to normal the moment Claude needs you, so you can tell from across the room which sessions are waiting on you.
 
+![Six Claude Code sessions in Windows Terminal: three tinted slate while Claude works, one dimmer while only a dev server runs, and two at the normal background, one at a permission prompt and one finished.](.github/preview.svg)
+
 - **Working** (Claude is busy, or a subagent is, or a `/loop` wakeup or cron job is due within the hour): slate background `#1F2D3D`.
 - **Standing by** (Claude's turn is over, and only a background shell or monitor it started still runs, such as a dev server or a CI watch): a dimmer slate, `#161D25`. Nothing is asked of you, but Claude itself isn't working.
 - **Needs you** (turn finished, permission prompt, question, error): your normal terminal background.
