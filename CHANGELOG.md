@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.0](https://github.com/rogadev/glance/compare/v0.4.0...v0.5.0) (2026-11-09)
+
+### Features
+
+* show a dimmer standby tint for background shells, and drop background work Claude Code no longer lists ([d4c0e4d](https://github.com/rogadev/glance/commit/d4c0e4dcfb61cc2d549acaa31f9aa2720f4952be))
+
 ## [0.4.0](https://github.com/rogadev/glance/compare/v0.3.1...v0.4.0) (2026-11-08)
 
 ### Features
