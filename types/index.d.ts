@@ -1,7 +1,11 @@
 /** What glance.mjs last decided for this session, as the desktop band draws it. */
 export type Pane = {
-  state: 'working' | 'attention'
-  /** CONFIG.workingColor in glance.mjs, so the band and the tint match; empty until glance.mjs first reports. */
+  state: 'working' | 'standby' | 'attention'
+  /**
+   * The color glance.mjs gives the band, so the band and the tint match:
+   * CONFIG.standbyColor on standby, CONFIG.workingColor otherwise. Empty until
+   * glance.mjs first reports.
+   */
   color: string
 }
 

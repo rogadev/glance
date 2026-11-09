@@ -1,6 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ancestorTtyFrom, backgroundChanges, decide, detectTerminal, diagnoseReset, emptyState, endedTaskIds, osc, CONFIG, WORKING, ATTENTION } from '../glance.mjs';
+import {
+  ancestorTtyFrom,
+  backgroundChanges,
+  decide,
+  detectTerminal,
+  diagnoseReset,
+  emptyState,
+  endedTaskIds,
+  osc,
+  recheckAt,
+  stateLine,
+  CONFIG,
+  WORKING,
+  STANDBY,
+  ATTENTION,
+} from '../glance.mjs';
 
 const T = 1_000_000;
 
@@ -44,10 +59,11 @@ test('a manual /compact also ends on the SessionStart (compact) that follows it'
   assert.equal(run([main('SessionStart', { source: 'compact' })], during).state, ATTENTION);
 });
 
-test('a manual /compact with a background shell running stays working', () => {
+test('a manual /compact with a background shell running ends on standby', () => {
   const during = run([bgShell('b1'), main('Stop'), main('PreCompact', { trigger: 'manual' })]);
+  assert.equal(during.state, WORKING);
   const after = run([main('PostCompact', { trigger: 'manual' })], during);
-  assert.equal(after.state, WORKING);
+  assert.equal(after.state, STANDBY);
   assert.deepEqual(ids(after), ['b1']);
 });
 
@@ -132,9 +148,10 @@ test('a notification for one task leaves the others running', () => {
   assert.deepEqual(ids(s), ['a2']);
 });
 
-test('a background shell (for example a CI watch) keeps the pane working after Stop', () => {
+test('a background shell (a CI watch, a dev server) puts the pane on standby after Stop, not working', () => {
   const waiting = run([main('UserPromptSubmit'), bgShell('b37q4qei1'), main('Stop')]);
-  assert.equal(waiting.state, WORKING);
+  assert.equal(waiting.state, STANDBY);
+  assert.equal(waiting.reason, 'shell-running');
   assert.deepEqual(ids(waiting), ['b37q4qei1']);
   // Its completion arrives as a prompt; the turn that handles it ends with Stop.
   const done = run([main('UserPromptSubmit', { prompt: notice('b37q4qei1', 'completed') }), main('Stop')], waiting);
@@ -159,7 +176,7 @@ test('a shell stopped with TaskStop no longer holds the tint', () => {
 
 test('TaskStop clears only the shell it stopped', () => {
   const s = run([main('UserPromptSubmit'), bgShell('b1'), bgShell('b2'), taskStop('b1'), main('Stop')]);
-  assert.equal(s.state, WORKING);
+  assert.equal(s.state, STANDBY);
   assert.deepEqual(ids(s), ['b2']);
 });
 
@@ -174,7 +191,7 @@ test('TaskStop takes the id from its input when the response has none, and the o
 
 test('a TaskStop that failed keeps the shell, since it may still be running', () => {
   const s = run([bgShell('b1'), taskStop('b1', { hook_event_name: 'PostToolUseFailure' }), main('Stop')]);
-  assert.equal(s.state, WORKING);
+  assert.equal(s.state, STANDBY);
   assert.deepEqual(ids(s), ['b1']);
 });
 
@@ -292,9 +309,9 @@ test('TurnAborted (Esc, reported by the glance mod) clears the tint at once', ()
   assert.equal(s.reason, 'aborted');
 });
 
-test('TurnAborted with background work still running stays working', () => {
-  const s = run([main('UserPromptSubmit'), bgShell('ci'), main('TurnAborted')]);
-  assert.equal(s.state, WORKING);
+test('TurnAborted with a subagent still running stays working, and with only a shell goes to standby', () => {
+  assert.equal(run([main('UserPromptSubmit'), sub('SubagentStart', 'a1'), main('TurnAborted')]).state, WORKING);
+  assert.equal(run([main('UserPromptSubmit'), bgShell('ci'), main('TurnAborted')]).state, STANDBY);
 });
 
 test('GlanceReset (/glance-fix) clears a tint held by stale shells and schedules', () => {
@@ -444,8 +461,10 @@ test('TitleIdle ignores idle time from before the latest hook (title lags a new 
 });
 
 test('TitleIdle never clears the tint while background work runs', () => {
-  const s = run([main('UserPromptSubmit', { at: T }), { ...bgShell('ci'), at: T + 100 }, main('Stop', { at: T + 200 })]);
-  assert.equal(run([titleIdle(T + 300, T + 60_000)], s).state, WORKING);
+  const agent = run([main('UserPromptSubmit', { at: T }), { ...sub('SubagentStart', 'a1'), at: T + 100 }, main('Stop', { at: T + 200 })]);
+  assert.equal(run([titleIdle(T + 300, T + 60_000)], agent).state, WORKING);
+  const shell = run([main('UserPromptSubmit', { at: T }), { ...bgShell('ci'), at: T + 100 }, main('Stop', { at: T + 200 })]);
+  assert.equal(run([titleIdle(T + 300, T + 60_000)], shell).state, STANDBY);
 });
 
 test('TitleIdle never turns the pane to working', () => {
@@ -473,8 +492,10 @@ test('UiIdle leaves the tint alone when a hook landed while it waited', () => {
 });
 
 test('UiIdle never clears the tint while background work runs', () => {
-  const s = run([main('UserPromptSubmit', { at: T }), { ...bgShell('ci'), at: T + 100 }, main('Stop', { at: T + 200 })]);
-  assert.equal(run([uiIdle(T + 300, T + 60_000)], s).state, WORKING);
+  const agent = run([main('UserPromptSubmit', { at: T }), { ...sub('SubagentStart', 'a1'), at: T + 100 }, main('Stop', { at: T + 200 })]);
+  assert.equal(run([uiIdle(T + 300, T + 60_000)], agent).state, WORKING);
+  const shell = run([main('UserPromptSubmit', { at: T }), { ...bgShell('ci'), at: T + 100 }, main('Stop', { at: T + 200 })]);
+  assert.equal(run([uiIdle(T + 300, T + 60_000)], shell).state, STANDBY);
 });
 
 test('bash mode (no hook, only UiWorking) shows working, then needs you on Stop', () => {
@@ -534,8 +555,10 @@ test('SessionEnd ends tracking', () => {
   assert.equal(run([main('UserPromptSubmit'), main('SessionEnd')]), null);
 });
 
-test('osc gives the working color, and resets to the profile for attention', () => {
+test('osc gives the working and standby colors, and resets to the profile for attention', () => {
   assert.equal(osc(WORKING), `11;${CONFIG.workingColor}`);
+  assert.equal(osc(STANDBY), `11;${CONFIG.standbyColor}`);
+  assert.notEqual(CONFIG.standbyColor, CONFIG.workingColor);
   assert.equal(osc(ATTENTION), '111');
 });
 
@@ -606,4 +629,180 @@ test('UiWorking turns working only from a finished state, never from a fresh one
 test('UiIdle with no idle_since waits out the confirm window from the last hook', () => {
   const s = run([main('UserPromptSubmit', { at: T })]);
   assert.equal(run([{ hook_event_name: 'UiIdle', at: T + 500 }], s).state, WORKING);
+});
+
+// Stop and SubagentStop carry background_tasks: everything Claude Code still
+// has in flight (captured 2026-11-09, Claude Code 2.1.319).
+const task = (id, type = 'shell') => ({ id, type, status: 'running', description: 'x' });
+
+test('a shell a subagent started is dropped at Stop once Claude Code no longer lists it', () => {
+  // Seen live: three subagents each ran a background shell that ended within
+  // seconds. No hook reports that end, and the pane stayed tinted for 28 minutes.
+  const s = run([
+    main('UserPromptSubmit'),
+    sub('SubagentStart', 'a1'),
+    sub('PostToolUse', 'a1', { tool_name: 'Bash', tool_response: { backgroundTaskId: 'bg1' } }),
+    sub('SubagentStop', 'a1'),
+    main('Stop', { background_tasks: [] }),
+  ]);
+  assert.equal(s.state, ATTENTION);
+  assert.deepEqual(ids(s), []);
+});
+
+test('Stop keeps the background work Claude Code still lists, and notes when it was listed', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('dev'), bgShell('gone'), main('Stop', { background_tasks: [task('dev')] })]);
+  assert.equal(s.state, STANDBY);
+  assert.deepEqual(ids(s), ['dev']);
+  assert.equal(s.background.dev.seen, s.updatedAt);
+});
+
+test('Stop adds background work Claude Code lists that glance never heard start', () => {
+  const s = run([main('UserPromptSubmit'), main('Stop', { background_tasks: [task('a9', 'subagent'), task('b9'), task('m9', 'MCP task')] })]);
+  assert.equal(s.state, WORKING);
+  assert.deepEqual(
+    Object.entries(s.background).map(([id, item]) => [id, item.kind]),
+    [
+      ['a9', 'agent'],
+      ['b9', 'shell'],
+      ['m9', 'MCP-task'],
+    ],
+  );
+});
+
+test('a workflow Claude Code lists holds the working color, and a monitor only standby', () => {
+  assert.equal(run([main('Stop', { background_tasks: [task('w1', 'workflow')] })]).state, WORKING);
+  assert.equal(run([main('Stop', { background_tasks: [task('m1', 'monitor')] })]).state, STANDBY);
+});
+
+test('Stop with no task list (an older Claude Code) keeps what glance tracked', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('dev'), sub('SubagentStart', 'a1'), main('Stop')]);
+  assert.deepEqual(ids(s), ['dev', 'a1']);
+  assert.equal(s.background.dev.seen, undefined);
+});
+
+test('SubagentStop drops what is no longer listed, and the stopping agent though it still lists itself', () => {
+  const s = run([
+    main('UserPromptSubmit'),
+    sub('SubagentStart', 'a1'),
+    sub('SubagentStart', 'a2'),
+    bgShell('gone'),
+    sub('SubagentStop', 'a1', { background_tasks: [task('a1', 'subagent'), task('a2', 'subagent')] }),
+  ]);
+  assert.deepEqual(ids(s), ['a2']);
+});
+
+test('the task list never touches scheduled runs, which it does not hold', () => {
+  const s = run([{ ...wakeup(T + 240_000, 'loop'), at: T }, main('Stop', { background_tasks: [], at: T + 1000 })]);
+  assert.equal(s.state, WORKING);
+  assert.deepEqual(ids(s), ['wakeup']);
+});
+
+test('a subagent and a shell together hold working, and the shell alone holds standby once the agent ends', () => {
+  const both = run([main('UserPromptSubmit'), bgShell('dev'), sub('SubagentStart', 'a1'), main('Stop')]);
+  assert.equal(both.state, WORKING);
+  const after = run([sub('SubagentStop', 'a1'), main('UserPromptSubmit', { prompt: notice('a1', 'completed') }), main('Stop')], both);
+  assert.equal(after.state, STANDBY);
+  assert.deepEqual(ids(after), ['dev']);
+});
+
+test('idle_prompt with only a shell running is standby, never working', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('dev'), main('Notification', { notification_type: 'idle_prompt' })]);
+  assert.equal(s.state, STANDBY);
+});
+
+test('a question or a permission prompt shows needs you, whatever runs in the background', () => {
+  const standby = run([main('UserPromptSubmit'), bgShell('dev'), main('Stop')]);
+  assert.equal(run([main('UserPromptSubmit'), main('PermissionRequest')], standby).state, ATTENTION);
+  assert.equal(run([main('Notification', { notification_type: 'permission_prompt' })], standby).state, ATTENTION);
+});
+
+test('bash mode turns a standby pane working, and it goes back to standby on Stop', () => {
+  const standby = run([main('UserPromptSubmit'), bgShell('dev'), main('Stop')]);
+  const busy = run([main('UiWorking')], standby);
+  assert.equal(busy.state, WORKING);
+  assert.equal(run([main('Stop')], busy).state, STANDBY);
+});
+
+// Tick comes from the mod at the moment recheckAt() named: no event arrives
+// when background work expires in an idle session.
+const tick = (at) => ({ hook_event_name: 'Tick', at });
+
+test('Tick clears a standby pane once its shell has expired', () => {
+  const s = run([main('UserPromptSubmit', { at: T }), { ...bgShell('dev'), at: T }, main('Stop', { at: T + 1000 })]);
+  assert.equal(run([tick(T + CONFIG.shellTtlMs - 1)], s).state, STANDBY);
+  const expired = run([tick(T + CONFIG.shellTtlMs + 1)], s);
+  assert.equal(expired.state, ATTENTION);
+  assert.equal(expired.reason, 'expired');
+  assert.deepEqual(ids(expired), []);
+});
+
+test('Tick clears a working pane held by a subagent that expired, and one held by a missed wakeup', () => {
+  const agent = run([main('UserPromptSubmit', { at: T }), { ...sub('SubagentStart', 'a1'), at: T }, main('Stop', { at: T + 1000 })]);
+  assert.equal(run([tick(T + CONFIG.agentTtlMs + 1)], agent).state, ATTENTION);
+  const loop = run([{ ...wakeup(T + 240_000, 'loop'), at: T }, main('Stop', { at: T + 1000 })]);
+  assert.equal(run([tick(T + 240_000)], loop).state, WORKING);
+  assert.equal(run([tick(T + 240_000 + 121_000)], loop).state, ATTENTION);
+});
+
+test('Tick tints a finished pane when a scheduled run comes within the hour', () => {
+  const s = run([{ ...cron('c1', T + 2 * 3600_000, '0 9 * * *', true), at: T }, main('Stop', { at: T + 1000 })]);
+  assert.equal(s.state, ATTENTION);
+  assert.equal(run([tick(T + 30 * 60_000)], s).state, ATTENTION);
+  const near = run([tick(T + 3600_000 + 1000)], s);
+  assert.equal(near.state, WORKING);
+  assert.equal(near.reason, 'background-running');
+});
+
+test('Tick never covers a question or changes a turn in progress', () => {
+  const soon = { ...wakeup(T + 240_000, 'loop'), at: T };
+  const asked = run([soon, main('PreToolUse', { tool_name: 'AskUserQuestion' }), tick(T + 5000)]);
+  assert.equal(asked.state, ATTENTION);
+  assert.equal(asked.reason, 'asking');
+  // Mid-turn, an expired shell changes nothing: the turn's own Stop decides.
+  const midTurn = run([main('UserPromptSubmit', { at: T }), { ...bgShell('dev'), at: T }, tick(T + CONFIG.shellTtlMs + 1)]);
+  assert.equal(midTurn.state, WORKING);
+  assert.equal(midTurn.reason, 'tool-done');
+});
+
+test('Tick leaves a pane /glance-fix reset on needs you, even with a scheduled run due', () => {
+  const s = {
+    ...emptyState(),
+    reason: 'reset',
+    updatedAt: T,
+    background: { wakeup: { kind: 'wakeup', at: T, dueAt: T + 240_000, prompt: 'p' } },
+  };
+  assert.equal(decide(s, tick(), T + 1000).state, ATTENTION);
+});
+
+test('recheckAt names the next moment time alone changes the pane', () => {
+  assert.equal(recheckAt({ background: {} }, T), null);
+  assert.equal(recheckAt(null, T), null);
+  const shell = { background: { b1: { kind: 'shell', at: T }, a1: { kind: 'agent', at: T } } };
+  assert.equal(recheckAt(shell, T + 5), T + CONFIG.shellTtlMs);
+  // A wakeup due soon: the moment it counts as missed (2 minutes late).
+  const soon = { background: { wakeup: { kind: 'wakeup', at: T, dueAt: T + 240_000 } } };
+  assert.equal(recheckAt(soon, T), T + 240_000 + 120_000);
+  // One due in three hours: the moment it comes within the hour.
+  const far = { background: { wakeup: { kind: 'wakeup', at: T, dueAt: T + 3 * 3600_000 } } };
+  assert.equal(recheckAt(far, T), T + 2 * 3600_000);
+});
+
+test('the state line carries the standby color and when to check back, and neither for a plain state', () => {
+  assert.deepEqual(JSON.parse(stateLine({ state: WORKING, background: {} }, T)), { state: WORKING, color: CONFIG.workingColor });
+  assert.deepEqual(JSON.parse(stateLine(null, T)), { state: ATTENTION, color: CONFIG.workingColor });
+  const standby = { state: STANDBY, background: { b1: { kind: 'shell', at: T } } };
+  assert.deepEqual(JSON.parse(stateLine(standby, T)), { state: STANDBY, color: CONFIG.standbyColor, recheck_in_ms: CONFIG.shellTtlMs });
+  // Never sooner than the floor, so a check that changes nothing can't loop.
+  assert.equal(JSON.parse(stateLine(standby, T + CONFIG.shellTtlMs + 5000)).recheck_in_ms, CONFIG.recheckMinMs);
+});
+
+test('/glance-fix on a standby pane names the shell Claude Code listed as running, not a bug', () => {
+  const s = run([main('UserPromptSubmit'), bgShell('dev'), main('Stop', { background_tasks: [task('dev')] })]);
+  assert.equal(s.state, STANDBY);
+  const d = diagnoseReset(s, main('GlanceReset', { live_agents: [] }), s.updatedAt + 5 * MIN);
+  assert.equal(d.verdict, 'background-running');
+  assert.equal(d.suspect, false);
+  assert.match(d.cause, /shell dev \(started 5 min ago, listed as running 5 min ago\)/);
+  // The reset still drops it: the pane is yours to clear.
+  assert.deepEqual(ids(run([main('GlanceReset', { live_agents: [] })], s)), []);
 });

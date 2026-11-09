@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Pane } from '../types'
 
@@ -9,9 +9,10 @@ import type { Pane } from '../types'
 // entries), PreToolUse (through `tool.call`, which carries a subagent's
 // `agentId`), Esc (`turn.complete` aborted, which fires no settings hook), the
 // engine's isWorking (UiWorking and UiIdle, for what sends no hook, such as
-// bash mode or a cancelled /compact), /glance-check, and /glance-fix. The
-// desktop app has no terminal to tint, so there the mod draws a band above the
-// prompt from the state glance.mjs reports back.
+// bash mode or a cancelled /compact), a Tick when glance.mjs asks to be
+// checked on later (background work expires with no event), /glance-check,
+// and /glance-fix. The desktop app has no terminal to tint, so there the mod
+// draws a band above the prompt from the state glance.mjs reports back.
 
 /**
  * This session's pane as glance.mjs last reported it. Change `shape` when Pane
@@ -19,20 +20,35 @@ import type { Pane } from '../types'
  * the band draws only after that.
  */
 const pane = atom({ plugin: 'glance', key: 'pane' } as const, { state: 'attention', color: '' } as Pane, {
-  shape: 'pane-1',
+  shape: 'pane-2',
 })
+
+const STATES: ReadonlySet<string> = new Set(['working', 'standby', 'attention'])
 
 /** The state line glance.mjs prints first for every event the mod sends, or null. */
 export function parsePane(stdout: string): Pane | null {
   try {
     const r = JSON.parse(stdout.split('\n')[0] || '')
-    if ((r.state === 'working' || r.state === 'attention') && typeof r.color === 'string') {
+    if (STATES.has(r.state) && typeof r.color === 'string') {
       return { state: r.state, color: r.color }
     }
   } catch {
     // Older glance.mjs, or no output: the band keeps its last state.
   }
   return null
+}
+
+/**
+ * Gets how long glance.mjs's state line says to wait before sending a Tick,
+ * in milliseconds, or 0 when it asks for none.
+ */
+export function recheckOf(stdout: string): number {
+  try {
+    const ms = JSON.parse(stdout.split('\n')[0] || '').recheck_in_ms
+    return typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? ms : 0
+  } catch {
+    return 0
+  }
 }
 
 const FIX = 'glance-fix'
@@ -45,7 +61,7 @@ type Summary = { was?: string; dropped?: string[]; kept?: string[]; paint?: stri
 
 /** glance.mjs's "attention [stop]" in the words the commands use: "needs you [stop]". */
 function plainState(state: string | undefined): string {
-  return (state || 'unknown').replace(/^attention\b/, 'needs you')
+  return (state || 'unknown').replace(/^attention\b/, 'needs you').replace(/^standby\b/, 'standing by')
 }
 
 /** Turns glance.mjs's one-line JSON summary into the command's output. */
@@ -182,6 +198,49 @@ export function cannotStart(err: unknown): boolean {
   return /failed to start|ENOENT/.test(String(err))
 }
 
+// The timer for the next Tick and when it fires, so the events of a turn
+// don't each replace a timer that is already right.
+let recheck: Timer | undefined
+let recheckDue = 0
+/** Two due times closer than this are the same timer. */
+const RECHECK_SLACK_MS = 5000
+/** The longest one timer waits; the Tick it sends asks again. */
+const RECHECK_MAX_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Sets the timer for the Tick glance.mjs asked for, `ms` from now, or clears
+ * it when `ms` is 0. Background work expires, and a scheduled run comes due,
+ * with no event to repaint the pane; the Tick is that event.
+ */
+function armRecheck($: EngineInterface, ms: number) {
+  if (!ms) {
+    recheck?.cancel()
+    recheck = undefined
+    recheckDue = 0
+    return
+  }
+  const due = Date.now() + ms
+  if (recheck && Math.abs(due - recheckDue) < RECHECK_SLACK_MS) return
+  recheck?.cancel()
+  recheckDue = due
+  // A second late, so glance.mjs finds the moment it named already past.
+  recheck = $.clock.after(Math.min(ms, RECHECK_MAX_MS) + 1000, () => {
+    recheck = undefined
+    recheckDue = 0
+    void tick($)
+  })
+}
+
+/** Sends glance.mjs the Tick it asked for. Never throws: nobody awaits it. */
+async function tick($: EngineInterface) {
+  try {
+    const session_id = await $.session.id()
+    await glance($, { hook_event_name: 'Tick', session_id })
+  } catch (err: unknown) {
+    $.ui.log(`glance: could not send the Tick: ${String(err)}`, { to: 'debug' })
+  }
+}
+
 /**
  * Runs glance.mjs with one event on stdin. Never throws: a run that couldn't
  * start or didn't finish comes back as `{ error }`, so a command can say which.
@@ -204,6 +263,11 @@ async function glance($: EngineInterface, input: object) {
     return { error: err }
   }
   if (r.exitCode !== 0) $.ui.log(`glance: exit ${r.exitCode}: ${r.stderr.slice(0, 200)}`, { to: 'debug' })
+  try {
+    armRecheck($, recheckOf(r.stdout))
+  } catch (err: unknown) {
+    $.ui.log(`glance: could not set the timer for the next check: ${String(err)}`, { to: 'debug' })
+  }
   const next = parsePane(r.stdout)
   if (!next) {
     $.ui.log(`glance: no state line from glance.mjs: ${r.stdout.slice(0, 200)}`, { to: 'debug' })
@@ -242,6 +306,9 @@ async function noteWorking($: EngineInterface, working: boolean) {
     if (working) {
       await $.clock.sleep(WORKING_SETTLE_MS)
       if (change !== uiChanges || ownCommands > 0) return
+      // Every turn gets here 1.5 s in, already working from its prompt:
+      // UiWorking would change nothing, so skip the run.
+      if ((await read($, pane)).state === 'working') return
     }
     const session_id = await $.session.id()
     await glance($, { hook_event_name: working ? 'UiWorking' : 'UiIdle', session_id, idle_since })
@@ -562,8 +629,9 @@ export const register: Register = (on) => {
   }).catch((_$, _e, next) => ({ text: `glance-report failed: ${String(next.error)}` }))
 
   /**
-   * The desktop app's stand-in for the terminal tint: a full-width band in the
-   * working color above the prompt while glance says working, and nothing
+   * The desktop app's stand-in for the terminal tint: a full-width band above
+   * the prompt, in the working color while glance says working and in the
+   * dimmer standby color while only a background shell runs, and nothing
    * otherwise (needs you). The terminal is tinted by glance.mjs, so it passes.
    */
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -574,12 +642,12 @@ export const register: Register = (on) => {
     lastSurface = e.surface
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     const now = await read($, pane)
-    if (now.state !== 'working') return next(e)
+    if (now.state === 'attention') return next(e)
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box width="100%" paddingX={1} backgroundColor={now.color}>
         <Text color="#FFFFFF">
-          Claude is working
+          {now.state === 'working' ? 'Claude is working' : 'A background task is still running'}
         </Text>
       </Box>
     )
@@ -593,10 +661,15 @@ export const register: Register = (on) => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId === undefined && (e.reason === 'aborted' || e.isAborted)) {
-      const session_id = await $.session.id()
-      // Not awaited: the turn's end shouldn't wait on painting.
-      void glance($, { hook_event_name: 'TurnAborted', session_id })
+      // The turn is already over: nothing here may lose its result.
+      try {
+        const session_id = await $.session.id()
+        // Not awaited: the turn's end shouldn't wait on painting.
+        void glance($, { hook_event_name: 'TurnAborted', session_id })
+      } catch (err: unknown) {
+        $.ui.log(`glance: could not report the Esc: ${String(err)}`, { to: 'debug' })
+      }
     }
     return result
-  })
+  }).catch(failOpen)
 }

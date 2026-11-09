@@ -11,11 +11,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-import { PROMPT_KEEP, advance, allowanceMs, promptMatches, scheduleHoldsTint } from './schedule.mjs';
+import { PROMPT_KEEP, SCHEDULE_HORIZON_MS, advance, allowanceMs, promptMatches, scheduleHoldsTint } from './schedule.mjs';
 
 export const CONFIG = {
-  // Background while Claude, or background work it started, is busy.
+  // Background while Claude, a subagent, or a scheduled run due soon is busy.
   workingColor: '#1F2D3D',
+  // Background while Claude's turn is over and only a background shell (a dev
+  // server, a CI watch) still runs: halfway between a dark terminal and the
+  // working color, so slate always means Claude itself is busy.
+  standbyColor: '#161D25',
   // null resets to the Windows Terminal profile background (OSC 111).
   attentionColor: null,
   // Background work with no end signal after this long is treated as finished.
@@ -32,17 +36,36 @@ export const CONFIG = {
   // How long /glance-check shows the working color before putting the pane back.
   checkFlashMs: 1500,
   stateDir: path.join(os.homedir(), '.claude', 'state', 'glance'),
-  logMaxBytes: 512 * 1024,
+  // events.log rotates at this size, keeping this many older files
+  // (events.log.1 is the newest of them).
+  logMaxBytes: 1024 * 1024,
+  logKeep: 3,
+  // The soonest glance asks the mod to check back on background work (Tick).
+  recheckMinMs: 30 * 1000,
 };
 
 export const WORKING = 'working';
+export const STANDBY = 'standby';
 export const ATTENTION = 'attention';
 export const BACKGROUND_RUNNING = 'background-running';
+export const SHELL_RUNNING = 'shell-running';
 const COMPACT_MANUAL = 'compact-manual';
 
-// Needs-you reasons that mean "finished", not "asking you something", so the
-// engine starting work again (UiWorking) may turn the pane working.
-const SETTLED = new Set(['session-start', 'stop', 'stop-failure', 'aborted', 'compact-done', 'ui-idle', 'title-idle', 'reset', 'idle_prompt']);
+// Reasons that mean "finished", not "asking you something", so the engine
+// starting work again (UiWorking) may turn the pane working.
+const SETTLED = new Set([
+  'session-start',
+  'stop',
+  'stop-failure',
+  'aborted',
+  'compact-done',
+  'ui-idle',
+  'title-idle',
+  'reset',
+  'idle_prompt',
+  'expired',
+  SHELL_RUNNING,
+]);
 
 // Tools whose whole purpose is to wait for an answer from you.
 const ASKING_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
@@ -77,11 +100,26 @@ export function endedTaskIds(prompt) {
 
 const SCHEDULED = new Set(['wakeup', 'cron']);
 
+// Background work that is Claude itself working, so it holds the working
+// color. Anything else that isn't scheduled (a shell, a monitor) only holds
+// the standby color: it may be a dev server nobody is waiting on.
+const ACTIVE = new Set(['agent', 'workflow']);
+
+// What glance calls the task types Claude Code lists in background_tasks.
+const TASK_KINDS = { subagent: 'agent' };
+
+/** How long a background item with no end signal is kept. */
+function ttlOf(item) {
+  return ACTIVE.has(item.kind) ? CONFIG.agentTtlMs : CONFIG.shellTtlMs;
+}
+
 /**
  * Background work that hasn't expired. Entries are { kind, at } for
- * 'agent' and 'shell', plus { dueAt, prompt } for scheduled 'wakeup' and
- * 'cron' runs (and { cron, recurring } for cron). State files written before
- * shells were tracked hold an 'agents' map of id to start time.
+ * 'agent' and 'shell' (and any other task type Claude Code lists), plus
+ * { seen } once Claude Code has listed the item as running, and
+ * { dueAt, prompt } for scheduled 'wakeup' and 'cron' runs (and
+ * { cron, recurring } for cron). State files written before shells were
+ * tracked hold an 'agents' map of id to start time.
  */
 function liveBackground(prev, now) {
   const live = {};
@@ -94,10 +132,56 @@ function liveBackground(prev, now) {
       if (live_) live[id] = live_;
       continue;
     }
-    const ttl = item.kind === 'shell' ? CONFIG.shellTtlMs : CONFIG.agentTtlMs;
-    if (now - item.at < ttl) live[id] = item;
+    if (now - item.at < ttlOf(item)) live[id] = item;
   }
   return live;
+}
+
+/**
+ * Brings the tracked background work in line with the list Claude Code sends
+ * on Stop and SubagentStop (input.background_tasks: everything still in
+ * flight). Whatever the list no longer names has ended, whether or not its
+ * end reached glance: a shell a subagent started sends no end signal at all.
+ * Whatever it names that glance missed is added. Scheduled runs aren't in the
+ * list, and a stopping subagent is still in it, so both are left alone.
+ */
+function reconcile(background, input, now) {
+  const listed = new Map();
+  for (const task of input.background_tasks) {
+    if (task && task.id) listed.set(String(task.id), task);
+  }
+  for (const [id, item] of Object.entries(background)) {
+    if (SCHEDULED.has(item.kind) || id === input.agent_id) continue;
+    if (listed.has(id)) background[id] = { ...item, seen: now };
+    else delete background[id];
+  }
+  for (const [id, task] of listed) {
+    if (id === input.agent_id || background[id]) continue;
+    const type = String(task.type || 'task').replace(/\s+/g, '-');
+    background[id] = { kind: TASK_KINDS[type] || type, at: now, seen: now };
+  }
+}
+
+/**
+ * The next moment time alone could change the pane: a background item
+ * expiring, a scheduled run counted as missed, or one coming within the hour
+ * that holds the tint. No event arrives then, so the mod asks again (Tick).
+ *
+ * @param {{background?: object} | null} state The state just saved.
+ * @param {number} now Epoch milliseconds.
+ * @returns {number | null} Epoch milliseconds, or null with nothing to wait for.
+ */
+export function recheckAt(state, now) {
+  let at = Infinity;
+  for (const item of Object.values(state?.background || {})) {
+    if (!SCHEDULED.has(item.kind)) {
+      at = Math.min(at, item.at + ttlOf(item));
+      continue;
+    }
+    at = Math.min(at, item.dueAt + allowanceMs(item));
+    if (item.dueAt - now > SCHEDULE_HORIZON_MS) at = Math.min(at, item.dueAt - SCHEDULE_HORIZON_MS);
+  }
+  return Number.isFinite(at) ? at : null;
 }
 
 /** Rounds a span in milliseconds to whole minutes. */
@@ -121,19 +205,23 @@ export function diagnoseReset(prev, input, now) {
   const before = liveBackground(prev, now);
   const lost = [];
   const stale = [];
+  const listed = [];
   let running = 0;
   for (const [id, item] of Object.entries(before)) {
     if (item.kind === 'agent') {
       if (live.has(id)) running++;
       else lost.push(id);
-    } else {
+    } else if (SCHEDULED.has(item.kind)) {
       const due = minutes(item.dueAt - now);
-      const since = item.kind === 'shell' ? `started ${ago(now - item.at)}` : due >= 0 ? `due in ${due} min` : `due ${-due} min ago`;
-      stale.push(`${item.kind} ${id} (${since})`);
+      stale.push(`${item.kind} ${id} (${due >= 0 ? `due in ${due} min` : `due ${-due} min ago`})`);
+    } else if (item.seen) {
+      listed.push(`${item.kind} ${id} (started ${ago(now - item.at)}, listed as running ${ago(now - item.seen)})`);
+    } else {
+      stale.push(`${item.kind} ${id} (started ${ago(now - item.at)})`);
     }
   }
   const last = prev.updatedAt ? `, set ${ago(now - prev.updatedAt)}` : '';
-  if (prev.state !== WORKING) {
+  if (prev.state === ATTENTION) {
     return {
       verdict: 'already-needs-you',
       suspect: true,
@@ -151,7 +239,14 @@ export function diagnoseReset(prev, input, now) {
     return {
       verdict: 'stale-background',
       suspect: false,
-      cause: `glance was keeping the tint for background work it never heard finish: ${stale.join(', ')}. A shell left running, such as a dev server, does that for up to an hour.`,
+      cause: `glance was keeping the tint for background work it never heard finish: ${stale.join(', ')}. A shell left running, such as a dev server, holds the dimmer standby tint for up to an hour.`,
+    };
+  }
+  if (listed.length) {
+    return {
+      verdict: 'background-running',
+      suspect: false,
+      cause: `Claude Code listed this background work as still running when Claude last stopped, so the tint was right: ${listed.join(', ')}. glance has stopped counting it.`,
     };
   }
   if (running) {
@@ -185,9 +280,14 @@ export function backgroundChanges(before, after) {
   return changes.length ? ` (${changes.join(', ')})` : '';
 }
 
-/** True when any background work should keep the pane working right now. */
-function holdsTint(background, now) {
-  return Object.values(background).some((item) => !SCHEDULED.has(item.kind) || scheduleHoldsTint(item, now));
+/** True when background work that is Claude working (a subagent, a scheduled run due soon) is live. */
+function holdsWorking(background, now) {
+  return Object.values(background).some((item) => (SCHEDULED.has(item.kind) ? scheduleHoldsTint(item, now) : ACTIVE.has(item.kind)));
+}
+
+/** True when a background shell, or another task that isn't Claude working, is live. */
+function holdsStandby(background) {
+  return Object.values(background).some((item) => !SCHEDULED.has(item.kind) && !ACTIVE.has(item.kind));
 }
 
 /** Records or clears scheduled runs from the tools that manage them. */
@@ -230,16 +330,21 @@ export function decide(prev, input, now) {
   const event = input.hook_event_name;
   const fromMain = !input.agent_id;
   const background = liveBackground(prev, now);
+  if (Array.isArray(input.background_tasks)) reconcile(background, input, now);
   const next = (state, reason) => ({ state, reason, background });
   const same = () => next(prev.state, prev.reason);
-  const busy = () => holdsTint(background, now);
+  const busy = () => holdsWorking(background, now);
+  // Where the pane rests once Claude's own turn is over: working while a
+  // subagent or a scheduled run holds it, standby while only a shell does,
+  // and otherwise needs you, for the reason given.
+  const rest = (reason) => {
+    if (busy()) return next(WORKING, BACKGROUND_RUNNING);
+    return holdsStandby(background) ? next(STANDBY, SHELL_RUNNING) : next(ATTENTION, reason);
+  };
   // A manual /compact ends waiting on you. An automatic one runs inside a
   // turn, which goes on and ends with its own Stop. PostCompact and the
   // SessionStart (compact) after it both land here; the first one clears it.
-  const compactDone = () => {
-    if (prev.reason !== COMPACT_MANUAL) return same();
-    return busy() ? next(WORKING, BACKGROUND_RUNNING) : next(ATTENTION, 'compact-done');
-  };
+  const compactDone = () => (prev.reason === COMPACT_MANUAL ? rest('compact-done') : same());
 
   switch (event) {
     case 'SessionStart':
@@ -306,7 +411,7 @@ export function decide(prev, input, now) {
     case 'Notification':
       if (!ATTENTION_NOTIFICATIONS.has(input.notification_type)) return same();
       // Idle while background work runs is not "needs you".
-      if (input.notification_type === 'idle_prompt' && busy()) return next(WORKING, BACKGROUND_RUNNING);
+      if (input.notification_type === 'idle_prompt') return rest('idle_prompt');
       return next(ATTENTION, input.notification_type);
 
     case 'SubagentStart':
@@ -319,7 +424,7 @@ export function decide(prev, input, now) {
 
     case 'Stop':
       if (!fromMain) return same();
-      return busy() ? next(WORKING, BACKGROUND_RUNNING) : next(ATTENTION, 'stop');
+      return rest('stop');
 
     case 'StopFailure':
       return next(ATTENTION, 'stop-failure');
@@ -327,7 +432,19 @@ export function decide(prev, input, now) {
     case 'TurnAborted':
       // From the glance mod (hooks/register.tsx): you pressed Esc. No settings
       // hook fires for that, so without the mod this case is TitleIdle's job.
-      return busy() ? next(WORKING, BACKGROUND_RUNNING) : next(ATTENTION, 'aborted');
+      return rest('aborted');
+
+    case 'Tick': {
+      // From the mod, at the moment recheckAt() named: background work may
+      // have expired, or a scheduled run come within the hour, with no event
+      // to say so. Only a pane resting on background work can lose its tint,
+      // and only a finished one (never a question, never one /glance-fix
+      // reset) can gain it, from a scheduled run alone.
+      if (prev.reason === BACKGROUND_RUNNING || prev.state === STANDBY) return rest('expired');
+      const due = Object.values(background).some((item) => SCHEDULED.has(item.kind) && scheduleHoldsTint(item, now));
+      if (prev.state === ATTENTION && SETTLED.has(prev.reason) && prev.reason !== 'reset' && due) return next(WORKING, BACKGROUND_RUNNING);
+      return same();
+    }
 
     case 'GlanceReset': {
       // From the mod's /glance-fix: the pane shows working but you can see it
@@ -361,7 +478,7 @@ export function decide(prev, input, now) {
       if (prev.state !== WORKING || busy()) return same();
       const quietSince = Math.max(Number(input.idle_since) || now, prev.updatedAt || 0);
       if (now - quietSince < CONFIG.titleIdleConfirmMs) return same();
-      return next(ATTENTION, event === 'UiIdle' ? 'ui-idle' : 'title-idle');
+      return rest(event === 'UiIdle' ? 'ui-idle' : 'title-idle');
     }
 
     default:
@@ -438,14 +555,31 @@ function check(input, stateFile) {
   };
   log(`${new Date().toISOString()} ${String(input.session_id || '').slice(0, 8)} main GlanceCheck -> ${report.state} flash:${flash} restore:${restore} terminal:${report.terminal.name}`);
   // The state line first, as apply() prints it, so the mod's band stays current.
-  if (input.glance_via === 'mod') process.stdout.write(JSON.stringify({ state: state.state, color: CONFIG.workingColor }) + '\n');
+  if (input.glance_via === 'mod') process.stdout.write(stateLine(state, Date.now()) + '\n');
   process.stdout.write(JSON.stringify(report) + '\n');
 }
 
 /** The OSC body for a state, without the ESC ] prefix and BEL terminator. */
 export function osc(state) {
-  const color = state === WORKING ? CONFIG.workingColor : CONFIG.attentionColor;
+  const color = state === WORKING ? CONFIG.workingColor : state === STANDBY ? CONFIG.standbyColor : CONFIG.attentionColor;
   return color ? `11;${color}` : '111';
+}
+
+/**
+ * The line the mod reads first for every event it sends: the state and the
+ * color its desktop band draws in, plus how long until the mod should send a
+ * Tick, when background work could change the pane with no event.
+ *
+ * @param {{state: string, background?: object} | null} state The state just saved; null once the session has ended.
+ * @param {number} now Epoch milliseconds.
+ * @returns {string} One line of JSON.
+ */
+export function stateLine(state, now) {
+  const name = state ? state.state : ATTENTION;
+  const line = { state: name, color: name === STANDBY ? CONFIG.standbyColor : CONFIG.workingColor };
+  const at = recheckAt(state, now);
+  if (at !== null) line.recheck_in_ms = Math.max(CONFIG.recheckMinMs, at - now);
+  return JSON.stringify(line);
 }
 
 const PAINT_EXE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'paint.exe');
@@ -545,7 +679,7 @@ function paintConsole(body) {
  */
 function ensureWatcher(input, stateFile) {
   if (!CONFIG.titleWatcher || process.platform !== 'win32') return '';
-  if (['TitleIdle', 'UiIdle', 'UiWorking', 'TurnAborted', 'GlanceReset', 'SessionEnd'].includes(input.hook_event_name)) return '';
+  if (['TitleIdle', 'UiIdle', 'UiWorking', 'TurnAborted', 'GlanceReset', 'Tick', 'SessionEnd'].includes(input.hook_event_name)) return '';
   const watchFile = stateFile.replace(/\.json$/, '.watch');
   try {
     process.kill(Number(fs.readFileSync(watchFile, 'utf8')), 0);
@@ -590,18 +724,25 @@ function glanceVersion() {
 }
 
 /**
- * Reads the last `max` events.log lines for one session (its id's first 8
- * characters). A missing log is just empty; any other read failure comes back
- * as `error`, so the snapshot can say why its log is empty.
+ * Reads the last `max` log lines for one session (its id's first 8
+ * characters), from events.log and the file it last rotated out, so a
+ * rotation just before /glance-fix doesn't empty the snapshot. A missing log
+ * is just empty; any other read failure comes back as `error`, so the
+ * snapshot can say why its log is short.
  */
 function sessionLog(sid, max) {
-  try {
-    const lines = fs.readFileSync(path.join(CONFIG.stateDir, 'events.log'), 'utf8').split('\n');
-    return { lines: lines.filter((l) => l.split(' ')[1] === sid).slice(-max) };
-  } catch (err) {
-    if (err.code === 'ENOENT') return { lines: [] };
-    return { lines: [], error: err.code || err.message };
+  const lines = [];
+  let error;
+  for (const name of ['events.log.1', 'events.log']) {
+    try {
+      lines.push(...fs.readFileSync(path.join(CONFIG.stateDir, name), 'utf8').split('\n'));
+    } catch (err) {
+      if (err.code !== 'ENOENT') error = err.code || err.message;
+    }
   }
+  const recent = { lines: lines.filter((l) => l.split(' ')[1] === sid).slice(-max) };
+  if (error) recent.error = error;
+  return recent;
 }
 
 /**
@@ -616,6 +757,7 @@ function saveSnapshot(input, prev, diagnosis, written, now) {
     id,
     kind: item.kind,
     ...(item.at ? { started_min_ago: minutes(now - item.at) } : {}),
+    ...(item.seen ? { listed_running_min_ago: minutes(now - item.seen) } : {}),
     ...(item.dueAt ? { due_in_min: minutes(item.dueAt - now) } : {}),
   }));
   const snapshot = {
@@ -654,6 +796,9 @@ function log(line) {
   const file = path.join(CONFIG.stateDir, 'events.log');
   try {
     if (fs.existsSync(file) && fs.statSync(file).size > CONFIG.logMaxBytes) {
+      for (let n = CONFIG.logKeep - 1; n >= 1; n--) {
+        if (fs.existsSync(`${file}.${n}`)) fs.renameSync(`${file}.${n}`, `${file}.${n + 1}`);
+      }
       fs.renameSync(file, file + '.1');
     }
     fs.appendFileSync(file, line + '\n');
@@ -718,9 +863,11 @@ function sleep(ms) {
 
 function withLock(lockDir, fn) {
   const deadline = Date.now() + 2000;
+  let held = false;
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
+      held = true;
       break;
     } catch {
       // A lock older than a few seconds belongs to a hook that died.
@@ -734,7 +881,8 @@ function withLock(lockDir, fn) {
   try {
     fn();
   } finally {
-    fs.rmSync(lockDir, { recursive: true, force: true });
+    // Only this hook's own lock: one that ran without it leaves the holder's alone.
+    if (held) fs.rmSync(lockDir, { recursive: true, force: true });
   }
 }
 
@@ -770,9 +918,7 @@ function apply(input, stateFile) {
 
   // The mod reads this to draw the desktop band (hooks/register.tsx). Settings
   // hooks and the watcher don't send glance_via, and their stdout stays empty.
-  if (input.glance_via === 'mod') {
-    process.stdout.write(JSON.stringify({ state: next ? next.state : ATTENTION, color: CONFIG.workingColor }) + '\n');
-  }
+  if (input.glance_via === 'mod') process.stdout.write(stateLine(next, now) + '\n');
 
   if (input.hook_event_name === 'GlanceReset') {
     // The mod prints this as the command's output.
@@ -796,7 +942,8 @@ function apply(input, stateFile) {
   log(
     `${new Date(now).toISOString()} ${sid} ${who} ${input.hook_event_name}` +
       `${detail ? ` (${detail})` : ''} -> ${next ? next.state : 'reset'} [${next ? next.reason : 'session-end'}]` +
-      ` bg=${bgCount}${backgroundChanges(liveBackground(prev, now), next?.background)} ${written}${watch ? ' ' + watch : ''}`,
+      // Against everything the last event saved, so an item that expired shows as removed.
+      ` bg=${bgCount}${backgroundChanges(prev.background, next?.background)} ${written}${watch ? ' ' + watch : ''}`,
   );
 }
 
