@@ -1,161 +1,187 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="794" viewBox="0 0 1600 794" font-family="Cascadia Mono, Consolas, Menlo, monospace" font-size="12.5">
-<title>glance: six Claude Code sessions, tinted by state</title>
-<rect width="1600" height="794" fill="#2B2B2B"/>
-<clipPath id="clip-20-20"><rect x="20" y="20" width="510.6666666666667" height="335" rx="8"/></clipPath>
-<g clip-path="url(#clip-20-20)">
-<rect x="20" y="20" width="510.6666666666667" height="335" fill="#1F2D3D"/>
-<rect x="30" y="26" width="230" height="28" rx="6" fill="#FFFFFF" fill-opacity="0.06"/>
-<text x="42" y="45" fill="#D77757" font-size="12">✻</text>
-<text x="58" y="45" fill="#CCCCCC" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">Add rate limiting</text>
-<text x="242" y="45" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">×</text>
-<text x="278" y="45" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">+</text>
-<text x="446.66666666666674" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">–</text>
-<text x="476.66666666666674" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">□</text>
-<text x="506.66666666666674" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">×</text>
-<text x="36" y="80" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">I'll add a rate limiter to the public endpoints.</tspan></text>
-<text x="36" y="108.9" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/middleware/rateLimit.ts)</tspan></text>
-<text x="36" y="125.9" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#8B8B8B">Added 18 lines</tspan></text>
-<text x="36" y="154.8" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/routes/public.ts)</tspan></text>
-<text x="36" y="171.8" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#8B8B8B">Added 2 lines, removed 1 line</tspan></text>
-<text x="36" y="200.70000000000002" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm test -- rateLimit)</tspan></text>
-<text x="36" y="217.70000000000002" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#8B8B8B">Running…</tspan></text>
-<text x="36" y="246.60000000000002" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Brewing… </tspan><tspan fill="#8B8B8B">(1m 12s · ↓ 4.1k tokens)</tspan></text>
-<line x1="36" x2="514.6666666666667" y1="271.5" y2="271.5" stroke="#5A5A5A" stroke-width="1"/>
-<text x="36" y="289.1" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan><tspan fill="#CCCCCC"></tspan></text>
-<line x1="36" x2="514.6666666666667" y1="302.1" y2="302.1" stroke="#5A5A5A" stroke-width="1"/>
-<text x="36" y="319.70000000000005" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
-<text x="514.6666666666667" y="341" text-anchor="end" fill="#8B8B8B">api-server</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Cascadia Mono, Consolas, Menlo, monospace" font-size="12.5">
+<title>glance: four Claude Code sessions, one finished and waiting on you</title>
+<rect width="1600" height="900" fill="#1B1B1B"/>
+<clipPath id="clip-0-0"><rect x="0" y="0" width="799" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-0-0)">
+<rect x="0" y="0" width="799" height="425" fill="#1F2D3D"/>
+<path d="M8 40 L8 14 Q8 8 14 8 L252 8 Q258 8 258 14 L258 40 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="20" y="18" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M23 21.5 L27 24.5 L23 27.5 M28 28 L32 28" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="44" y="29" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ Add rate limiting</text>
+<path d="M238 21 L246 29 M246 21 L238 29" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M273 25 L283 25 M278 20 L278 30" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M304 23 L308 27 L312 23" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="676" x2="686" y1="20" y2="20" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="722" y="15" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M768 15 L778 25 M778 15 L768 25" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="8" y="51" width="783" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="16" y="64" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Add rate limiting to the public endpoints, 100 requests a minute per API key.</tspan></text>
+
+<text x="16" y="100" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">I'll add a token-bucket limiter as middleware and apply it to the public router.</tspan></text>
+
+<text x="16" y="136" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/middleware/rateLimit.ts)</tspan></text>
+<text x="16" y="154" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 42 lines</tspan></text>
+
+<text x="16" y="190" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/routes/public.ts)</tspan></text>
+<text x="16" y="208" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 2 lines, removed 1 line</tspan></text>
+
+<text x="16" y="244" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm test -- rateLimit)</tspan></text>
+<text x="16" y="262" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Running…</tspan></text>
+
+<text x="16" y="298" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Brewing… </tspan><tspan fill="#8B8B8B">(1m 12s · ↓ 4.1k tokens)</tspan></text>
+<line x1="16" x2="783" y1="351" y2="351" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="373" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="16" x2="783" y1="387" y2="387" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="409" xml:space="preserve"><tspan fill="#D77757">  ⏵⏵ accept edits on</tspan><tspan fill="#8B8B8B"> (shift+tab to cycle)</tspan></text>
 </g>
-<rect x="20.5" y="20.5" width="509.6666666666667" height="334" rx="8" fill="none" stroke="#000" stroke-opacity="0.5"/>
-<clipPath id="clip-544_6666666666667-20"><rect x="544.6666666666667" y="20" width="510.6666666666667" height="335" rx="8"/></clipPath>
-<g clip-path="url(#clip-544_6666666666667-20)">
-<rect x="544.6666666666667" y="20" width="510.6666666666667" height="335" fill="#1F2D3D"/>
-<rect x="554.6666666666667" y="26" width="230" height="28" rx="6" fill="#FFFFFF" fill-opacity="0.06"/>
-<text x="566.6666666666667" y="45" fill="#D77757" font-size="12">✻</text>
-<text x="582.6666666666667" y="45" fill="#CCCCCC" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">Landing page refresh</text>
-<text x="766.6666666666667" y="45" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">×</text>
-<text x="802.6666666666667" y="45" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">+</text>
-<text x="971.3333333333335" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">–</text>
-<text x="1001.3333333333335" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">□</text>
-<text x="1031.3333333333335" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">×</text>
-<text x="560.6666666666667" y="80" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">Splitting the audit three ways so it goes faster.</tspan></text>
-<text x="560.6666666666667" y="108.9" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC">3 background agents launched</tspan><tspan fill="#8B8B8B"> (↓ to manage)</tspan></text>
-<text x="560.6666666666667" y="125.9" xml:space="preserve"><tspan fill="#8B8B8B">  ├ </tspan><tspan fill="#CCCCCC">Audit page speed</tspan></text>
-<text x="560.6666666666667" y="142.9" xml:space="preserve"><tspan fill="#8B8B8B">  ├ </tspan><tspan fill="#CCCCCC">Check copy for broken links</tspan></text>
-<text x="560.6666666666667" y="159.9" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#CCCCCC">Review mobile layout</tspan></text>
-<text x="560.6666666666667" y="188.8" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">While they run, I'm tightening the hero section.</tspan></text>
-<text x="560.6666666666667" y="217.70000000000002" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Read</tspan><tspan fill="#CCCCCC">(src/components/Hero.astro)</tspan></text>
-<text x="560.6666666666667" y="246.60000000000002" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Pondering… </tspan><tspan fill="#8B8B8B">(3m 40s · ↓ 12.6k tokens)</tspan></text>
-<line x1="560.6666666666667" x2="1039.3333333333335" y1="271.5" y2="271.5" stroke="#5A5A5A" stroke-width="1"/>
-<text x="560.6666666666667" y="289.1" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan><tspan fill="#CCCCCC"></tspan></text>
-<line x1="560.6666666666667" x2="1039.3333333333335" y1="302.1" y2="302.1" stroke="#5A5A5A" stroke-width="1"/>
-<text x="560.6666666666667" y="319.70000000000005" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
-<text x="1039.3333333333335" y="341" text-anchor="end" fill="#8B8B8B">marketing-site</text>
+<rect x="0.5" y="0.5" width="798" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-801-0"><rect x="801" y="0" width="799" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-801-0)">
+<rect x="801" y="0" width="799" height="425" fill="#0C0C0C"/>
+<path d="M809 40 L809 14 Q809 8 815 8 L1053 8 Q1059 8 1059 14 L1059 40 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="821" y="18" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M824 21.5 L828 24.5 L824 27.5 M829 28 L833 28" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="845" y="29" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">✳ Release 2.4</text>
+<path d="M1039 21 L1047 29 M1047 21 L1039 29" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1074 25 L1084 25 M1079 20 L1079 30" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1105 23 L1109 27 L1113 23" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="1477" x2="1487" y1="20" y2="20" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1523" y="15" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1569 15 L1579 25 M1579 15 L1569 25" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="809" y="51" width="783" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="817" y="64" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Get 2.4.0 ready to release.</tspan></text>
+
+<text x="817" y="100" xml:space="preserve"><tspan fill="#8B8B8B">  Ran 3 shell commands</tspan></text>
+
+<text x="817" y="136" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm test)</tspan></text>
+<text x="817" y="154" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">58 passed, 0 failed</tspan></text>
+
+<text x="817" y="190" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(CHANGELOG.md)</tspan></text>
+<text x="817" y="208" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 14 lines</tspan></text>
+
+<text x="817" y="244" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">All 58 tests pass and the changelog is updated for 2.4.0. Want me to open the pull request?</tspan></text>
+
+<text x="817" y="280" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 6m 41s</tspan></text>
+<line x1="817" x2="1584" y1="351" y2="351" stroke="#5A5A5A" stroke-width="1"/>
+<text x="817" y="373" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="817" x2="1584" y1="387" y2="387" stroke="#5A5A5A" stroke-width="1"/>
+<text x="817" y="409" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
 </g>
-<rect x="545.1666666666667" y="20.5" width="509.6666666666667" height="334" rx="8" fill="none" stroke="#000" stroke-opacity="0.5"/>
-<clipPath id="clip-1069_3333333333335-20"><rect x="1069.3333333333335" y="20" width="510.6666666666667" height="335" rx="8"/></clipPath>
-<g clip-path="url(#clip-1069_3333333333335-20)">
-<rect x="1069.3333333333335" y="20" width="510.6666666666667" height="335" fill="#0C0C0C"/>
-<rect x="1079.3333333333335" y="26" width="230" height="28" rx="6" fill="#FFFFFF" fill-opacity="0.06"/>
-<text x="1091.3333333333335" y="45" fill="#D77757" font-size="12">✻</text>
-<text x="1107.3333333333335" y="45" fill="#CCCCCC" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">Push notifications</text>
-<text x="1291.3333333333335" y="45" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">×</text>
-<text x="1327.3333333333335" y="45" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">+</text>
-<text x="1496.0000000000002" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">–</text>
-<text x="1526.0000000000002" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">□</text>
-<text x="1556.0000000000002" y="44" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">×</text>
-<text x="1085.3333333333335" y="80" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">The notification module needs one new package.</tspan></text>
-<line x1="1085.3333333333335" x2="1564.0000000000002" y1="104.9" y2="104.9" stroke="#5A5A5A" stroke-width="1"/>
-<text x="1085.3333333333335" y="122.5" xml:space="preserve"><tspan fill="#7AA2F7" font-weight="700"> Bash command</tspan></text>
-<text x="1085.3333333333335" y="151.4" xml:space="preserve"><tspan fill="#CCCCCC">   pnpm add expo-notifications</tspan></text>
-<text x="1085.3333333333335" y="168.4" xml:space="preserve"><tspan fill="#8B8B8B">   Install the notifications SDK</tspan></text>
-<text x="1085.3333333333335" y="197.3" xml:space="preserve"><tspan fill="#CCCCCC"> Do you want to proceed?</tspan></text>
-<text x="1085.3333333333335" y="214.3" xml:space="preserve"><tspan fill="#7AA2F7"> ❯ 1. Yes</tspan></text>
-<text x="1085.3333333333335" y="231.3" xml:space="preserve"><tspan fill="#CCCCCC">   2. Yes, and don't ask again for pnpm add</tspan></text>
-<text x="1085.3333333333335" y="248.3" xml:space="preserve"><tspan fill="#CCCCCC">   3. No, and tell Claude what to do differently</tspan></text>
-<line x1="1085.3333333333335" x2="1564.0000000000002" y1="261.3" y2="261.3" stroke="#5A5A5A" stroke-width="1"/>
-<text x="1564.0000000000002" y="341" text-anchor="end" fill="#8B8B8B">mobile-app</text>
+<rect x="801.5" y="0.5" width="798" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-0-427"><rect x="0" y="427" width="799" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-0-427)">
+<rect x="0" y="427" width="799" height="425" fill="#1F2D3D"/>
+<path d="M8 467 L8 441 Q8 435 14 435 L252 435 Q258 435 258 441 L258 467 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="20" y="445" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M23 448.5 L27 451.5 L23 454.5 M28 455 L32 455" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="44" y="456" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ Landing page refresh</text>
+<path d="M238 448 L246 456 M246 448 L238 456" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M273 452 L283 452 M278 447 L278 457" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M304 450 L308 454 L312 450" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="676" x2="686" y1="447" y2="447" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="722" y="442" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M768 442 L778 452 M778 442 L768 452" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="8" y="478" width="783" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="16" y="491" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Audit the landing page, then tighten up the hero section.</tspan></text>
+
+<text x="16" y="527" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">Splitting the audit three ways so it goes faster.</tspan></text>
+
+<text x="16" y="563" xml:space="preserve"><tspan fill="#8B8B8B">  Launched 3 background agents (↓ to manage)</tspan></text>
+
+<text x="16" y="599" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">While they run, I'm tightening the hero section.</tspan></text>
+
+<text x="16" y="635" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Read</tspan><tspan fill="#CCCCCC">(src/components/Hero.astro)</tspan></text>
+<text x="16" y="653" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Read 88 lines</tspan></text>
+
+<text x="16" y="689" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Pondering… </tspan><tspan fill="#8B8B8B">(3m 40s · ↓ 12.6k tokens)</tspan></text>
+<line x1="16" x2="783" y1="778" y2="778" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="800" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="16" x2="783" y1="814" y2="814" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="836" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan><tspan fill="#8B8B8B"> · </tspan><tspan fill="#4FB6BE">3 agents</tspan></text>
 </g>
-<rect x="1069.8333333333335" y="20.5" width="509.6666666666667" height="334" rx="8" fill="none" stroke="#000" stroke-opacity="0.5"/>
-<clipPath id="clip-20-369"><rect x="20" y="369" width="510.6666666666667" height="335" rx="8"/></clipPath>
-<g clip-path="url(#clip-20-369)">
-<rect x="20" y="369" width="510.6666666666667" height="335" fill="#1F2D3D"/>
-<rect x="30" y="375" width="230" height="28" rx="6" fill="#FFFFFF" fill-opacity="0.06"/>
-<text x="42" y="394" fill="#D77757" font-size="12">✻</text>
-<text x="58" y="394" fill="#CCCCCC" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">API reference docs</text>
-<text x="242" y="394" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">×</text>
-<text x="278" y="394" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">+</text>
-<text x="446.66666666666674" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">–</text>
-<text x="476.66666666666674" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">□</text>
-<text x="506.66666666666674" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">×</text>
-<text x="36" y="429" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">Writing the reference pages from the OpenAPI spec.</tspan></text>
-<text x="36" y="457.9" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/authentication.md)</tspan></text>
-<text x="36" y="474.9" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#8B8B8B">Wrote 84 lines</tspan></text>
-<text x="36" y="503.79999999999995" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/projects.md)</tspan></text>
-<text x="36" y="520.8" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#8B8B8B">Wrote 132 lines</tspan></text>
-<text x="36" y="549.6999999999999" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/webhooks.md)</tspan></text>
-<text x="36" y="578.5999999999999" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Composing… </tspan><tspan fill="#8B8B8B">(6m 03s · ↓ 21.9k tokens)</tspan></text>
-<line x1="36" x2="514.6666666666667" y1="603.4999999999999" y2="603.4999999999999" stroke="#5A5A5A" stroke-width="1"/>
-<text x="36" y="621.0999999999999" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan><tspan fill="#CCCCCC"></tspan></text>
-<line x1="36" x2="514.6666666666667" y1="634.0999999999999" y2="634.0999999999999" stroke="#5A5A5A" stroke-width="1"/>
-<text x="36" y="651.6999999999999" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
-<text x="514.6666666666667" y="690" text-anchor="end" fill="#8B8B8B">docs</text>
+<rect x="0.5" y="427.5" width="798" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-801-427"><rect x="801" y="427" width="799" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-801-427)">
+<rect x="801" y="427" width="799" height="425" fill="#1F2D3D"/>
+<path d="M809 467 L809 441 Q809 435 815 435 L1053 435 Q1059 435 1059 441 L1059 467 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="821" y="445" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M824 448.5 L828 451.5 L824 454.5 M829 455 L833 455" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="845" y="456" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ API reference docs</text>
+<path d="M1039 448 L1047 456 M1047 448 L1039 456" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1074 452 L1084 452 M1079 447 L1079 457" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1105 450 L1109 454 L1113 450" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="1477" x2="1487" y1="447" y2="447" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1523" y="442" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1569 442 L1579 452 M1579 442 L1569 452" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="824" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="831" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="838" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="845" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="852" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="859" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="866" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="824" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="838" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="845" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="852" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="866" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="817" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="824" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="831" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="838" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="845" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="852" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="859" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="866" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="873" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="824" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="831" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="838" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="845" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="852" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="859" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="866" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="831" y="509" width="3.5" height="7" fill="#D77757"/>
+<rect x="845" y="509" width="3.5" height="7" fill="#D77757"/>
+<rect x="859" y="509" width="3.5" height="7" fill="#D77757"/>
+<rect x="873" y="509" width="3.5" height="7" fill="#D77757"/>
+<text x="898" y="490" fill="#F2F2F2" font-weight="700">Claude Code <tspan fill="#8B8B8B" font-weight="400">v2.1.321</tspan></text>
+<text x="898" y="508" fill="#8B8B8B">Opus 5.5 · Claude Pro</text>
+<text x="898" y="526" fill="#8B8B8B">~\Documents\GitHub\docs</text>
+<rect x="809" y="546" width="783" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="817" y="559" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Write the API reference pages from openapi.yaml.</tspan></text>
+
+<text x="817" y="595" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/authentication.md)</tspan></text>
+<text x="817" y="613" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Wrote 84 lines</tspan></text>
+
+<text x="817" y="649" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/projects.md)</tspan></text>
+<text x="817" y="667" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Wrote 132 lines</tspan></text>
+
+<text x="817" y="703" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/webhooks.md)</tspan></text>
+
+<text x="817" y="739" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Composing… </tspan><tspan fill="#8B8B8B">(6m 03s · ↓ 21.9k tokens)</tspan></text>
+<line x1="817" x2="1584" y1="778" y2="778" stroke="#5A5A5A" stroke-width="1"/>
+<text x="817" y="800" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="817" x2="1584" y1="814" y2="814" stroke="#5A5A5A" stroke-width="1"/>
+<text x="817" y="836" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
 </g>
-<rect x="20.5" y="369.5" width="509.6666666666667" height="334" rx="8" fill="none" stroke="#000" stroke-opacity="0.5"/>
-<clipPath id="clip-544_6666666666667-369"><rect x="544.6666666666667" y="369" width="510.6666666666667" height="335" rx="8"/></clipPath>
-<g clip-path="url(#clip-544_6666666666667-369)">
-<rect x="544.6666666666667" y="369" width="510.6666666666667" height="335" fill="#161D25"/>
-<rect x="554.6666666666667" y="375" width="230" height="28" rx="6" fill="#FFFFFF" fill-opacity="0.06"/>
-<text x="566.6666666666667" y="394" fill="#D77757" font-size="12">✻</text>
-<text x="582.6666666666667" y="394" fill="#CCCCCC" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">Chart tooltips</text>
-<text x="766.6666666666667" y="394" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">×</text>
-<text x="802.6666666666667" y="394" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">+</text>
-<text x="971.3333333333335" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">–</text>
-<text x="1001.3333333333335" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">□</text>
-<text x="1031.3333333333335" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">×</text>
-<text x="560.6666666666667" y="429" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC">Background command </tspan><tspan fill="#CCCCCC">"Start the dev server"</tspan><tspan fill="#8B8B8B"> running</tspan></text>
-<text x="560.6666666666667" y="446" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#8B8B8B">Local: http://localhost:5173/</tspan></text>
-<text x="560.6666666666667" y="474.9" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">The tooltips now follow the cursor and show both</tspan></text>
-<text x="560.6666666666667" y="491.9" xml:space="preserve"><tspan fill="#CCCCCC">  series. The dev server is still up, so you can</tspan></text>
-<text x="560.6666666666667" y="508.9" xml:space="preserve"><tspan fill="#CCCCCC">  try it at http://localhost:5173.</tspan></text>
-<text x="560.6666666666667" y="537.8" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 4m 18s</tspan></text>
-<line x1="560.6666666666667" x2="1039.3333333333335" y1="562.6999999999999" y2="562.6999999999999" stroke="#5A5A5A" stroke-width="1"/>
-<text x="560.6666666666667" y="580.3" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan><tspan fill="#CCCCCC"></tspan></text>
-<line x1="560.6666666666667" x2="1039.3333333333335" y1="593.3" y2="593.3" stroke="#5A5A5A" stroke-width="1"/>
-<text x="560.6666666666667" y="610.9" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
-<text x="1039.3333333333335" y="690" text-anchor="end" fill="#8B8B8B">dashboard</text>
-</g>
-<rect x="545.1666666666667" y="369.5" width="509.6666666666667" height="334" rx="8" fill="none" stroke="#000" stroke-opacity="0.5"/>
-<clipPath id="clip-1069_3333333333335-369"><rect x="1069.3333333333335" y="369" width="510.6666666666667" height="335" rx="8"/></clipPath>
-<g clip-path="url(#clip-1069_3333333333335-369)">
-<rect x="1069.3333333333335" y="369" width="510.6666666666667" height="335" fill="#0C0C0C"/>
-<rect x="1079.3333333333335" y="375" width="230" height="28" rx="6" fill="#FFFFFF" fill-opacity="0.06"/>
-<text x="1091.3333333333335" y="394" fill="#D77757" font-size="12">✻</text>
-<text x="1107.3333333333335" y="394" fill="#CCCCCC" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">Release 2.4</text>
-<text x="1291.3333333333335" y="394" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">×</text>
-<text x="1327.3333333333335" y="394" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">+</text>
-<text x="1496.0000000000002" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">–</text>
-<text x="1526.0000000000002" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">□</text>
-<text x="1556.0000000000002" y="393" fill="#8B8B8B" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">×</text>
-<text x="1085.3333333333335" y="429" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm test)</tspan></text>
-<text x="1085.3333333333335" y="446" xml:space="preserve"><tspan fill="#8B8B8B">  └ </tspan><tspan fill="#8B8B8B">58 passed, 0 failed</tspan></text>
-<text x="1085.3333333333335" y="474.9" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">All 58 tests pass and the changelog is updated</tspan></text>
-<text x="1085.3333333333335" y="491.9" xml:space="preserve"><tspan fill="#CCCCCC">  for 2.4.0. Want me to open the pull request?</tspan></text>
-<text x="1085.3333333333335" y="520.8" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 6m 41s</tspan></text>
-<line x1="1085.3333333333335" x2="1564.0000000000002" y1="545.6999999999999" y2="545.6999999999999" stroke="#5A5A5A" stroke-width="1"/>
-<text x="1085.3333333333335" y="563.3" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan><tspan fill="#CCCCCC"></tspan></text>
-<line x1="1085.3333333333335" x2="1564.0000000000002" y1="576.3" y2="576.3" stroke="#5A5A5A" stroke-width="1"/>
-<text x="1085.3333333333335" y="593.9" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
-<text x="1564.0000000000002" y="690" text-anchor="end" fill="#8B8B8B">cli-tool</text>
-</g>
-<rect x="1069.8333333333335" y="369.5" width="509.6666666666667" height="334" rx="8" fill="none" stroke="#000" stroke-opacity="0.5"/>
-<rect x="20" y="738" width="34" height="34" rx="6" fill="#1F2D3D" stroke="#6A6A6A"/>
-<text x="66" y="752" fill="#EEEEEE" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Working</text>
-<text x="66" y="770" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">Claude, a subagent, or a scheduled run is busy</text>
-<rect x="540" y="738" width="34" height="34" rx="6" fill="#161D25" stroke="#6A6A6A"/>
-<text x="586" y="752" fill="#EEEEEE" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Standing by</text>
-<text x="586" y="770" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">only a background shell, such as a dev server, runs</text>
-<rect x="1060" y="738" width="34" height="34" rx="6" fill="#0C0C0C" stroke="#6A6A6A"/>
-<text x="1106" y="752" fill="#EEEEEE" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Needs you</text>
-<text x="1106" y="770" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">your normal background: a question, a prompt, or done</text>
+<rect x="801.5" y="427.5" width="798" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<rect x="0" y="852" width="1600" height="48" fill="#1C1C1C"/>
+<line x1="0" x2="1600" y1="852.5" y2="852.5" stroke="#2E2E2E"/>
+<rect x="14" y="866" width="9" height="9" fill="#4CC2FF"/>
+<rect x="24" y="866" width="9" height="9" fill="#4CC2FF"/>
+<rect x="14" y="876" width="9" height="9" fill="#4CC2FF"/>
+<rect x="24" y="876" width="9" height="9" fill="#4CC2FF"/>
+<rect x="48" y="860" width="190" height="32" rx="16" fill="#2B2B2B" stroke="#3A3A3A"/>
+<circle cx="68" cy="875" r="5.5" stroke="#CFCFCF" stroke-width="1.4" fill="none"/>
+<line x1="72" y1="879" x2="76" y2="883" stroke="#CFCFCF" stroke-width="1.4"/>
+<text x="86" y="881" fill="#CFCFCF" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">Search</text>
+<rect x="253" y="868" width="8" height="16" rx="1.5" fill="#E6E6E6"/><rect x="263" y="868" width="8" height="16" rx="1.5" fill="none" stroke="#E6E6E6" stroke-width="1.4"/>
+<path d="M295 869 h8 l2 2 h12 v13 h-22 Z" fill="#F4C542"/><rect x="295" y="873" width="22" height="11" fill="#FFD966"/>
+<circle cx="350" cy="876" r="11" fill="#2A8CF0"/><circle cx="350" cy="876" r="5" fill="#BFE3FF"/>
+<circle cx="394" cy="876" r="9" fill="none" stroke="#B9B9B9" stroke-width="3" stroke-dasharray="3 2.2"/><circle cx="394" cy="876" r="3.5" fill="#B9B9B9"/>
+<rect x="426" y="866" width="24" height="20" rx="3" fill="#2B2B2B" stroke="#6A6A6A"/><path d="M431 872 L436 876 L431 880 M438 881 L444 881" stroke="#FFFFFF" stroke-width="1.6" fill="none"/>
+<rect x="430" y="895" width="16" height="3" rx="1.5" fill="#4CC2FF"/>
+<path d="M1386 879 L1390 874 L1394 879" stroke="#E6E6E6" stroke-width="1.3" fill="none"/>
+<path d="M1416 877 q9 -8 18 0 M1419 880 q6 -5 12 0" stroke="#E6E6E6" stroke-width="1.4" fill="none"/><circle cx="1425" cy="883" r="1.6" fill="#E6E6E6"/>
+<path d="M1446 873 h4 l5 -4 v14 l-5 -4 h-4 Z" fill="#E6E6E6"/><path d="M1459 872 q4 4 0 8" stroke="#E6E6E6" stroke-width="1.4" fill="none"/>
+<rect x="1472" y="871" width="20" height="10" rx="2" fill="none" stroke="#E6E6E6" stroke-width="1.2"/><rect x="1474" y="873" width="13" height="6" fill="#E6E6E6"/><rect x="1492" y="874" width="2" height="4" fill="#E6E6E6"/>
+<text x="1584" y="873" text-anchor="end" fill="#E6E6E6" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">2:45 PM</text>
+<text x="1584" y="889" text-anchor="end" fill="#E6E6E6" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">2026-11-09</text>
 </svg>

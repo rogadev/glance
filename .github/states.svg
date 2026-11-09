@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="526" viewBox="0 0 1600 526" font-family="Cascadia Mono, Consolas, Menlo, monospace" font-size="12.5">
+<title>glance's three states: working, standing by, and needs you</title>
+<rect width="1600" height="526" fill="#1B1B1B"/>
+<clipPath id="clip-20-20"><rect x="20" y="20" width="510.6666666666667" height="400" rx="6"/></clipPath>
+<g clip-path="url(#clip-20-20)">
+<rect x="20" y="20" width="510.6666666666667" height="400" fill="#1F2D3D"/>
+<path d="M28 60 L28 34 Q28 28 34 28 L236.48 28 Q242.48 28 242.48 34 L242.48 60 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="40" y="38" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M43 41.5 L47 44.5 L43 47.5 M48 48 L52 48" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="64" y="49" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ API reference docs</text>
+<path d="M222.48 41 L230.48 49 M230.48 41 L222.48 49" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M257.48 45 L267.48 45 M262.48 40 L262.48 50" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M288.48 43 L292.48 47 L296.48 43" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="407.66666666666674" x2="417.66666666666674" y1="40" y2="40" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="453.66666666666674" y="35" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M499.66666666666674 35 L509.66666666666674 45 M509.66666666666674 35 L499.66666666666674 45" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="43" y="74" width="7" height="7" fill="#D77757"/>
+<rect x="50" y="74" width="7" height="7" fill="#D77757"/>
+<rect x="57" y="74" width="7" height="7" fill="#D77757"/>
+<rect x="64" y="74" width="7" height="7" fill="#D77757"/>
+<rect x="71" y="74" width="7" height="7" fill="#D77757"/>
+<rect x="78" y="74" width="7" height="7" fill="#D77757"/>
+<rect x="85" y="74" width="7" height="7" fill="#D77757"/>
+<rect x="43" y="81" width="7" height="7" fill="#D77757"/>
+<rect x="57" y="81" width="7" height="7" fill="#D77757"/>
+<rect x="64" y="81" width="7" height="7" fill="#D77757"/>
+<rect x="71" y="81" width="7" height="7" fill="#D77757"/>
+<rect x="85" y="81" width="7" height="7" fill="#D77757"/>
+<rect x="36" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="43" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="50" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="57" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="64" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="71" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="78" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="85" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="92" y="88" width="7" height="7" fill="#D77757"/>
+<rect x="43" y="95" width="7" height="7" fill="#D77757"/>
+<rect x="50" y="95" width="7" height="7" fill="#D77757"/>
+<rect x="57" y="95" width="7" height="7" fill="#D77757"/>
+<rect x="64" y="95" width="7" height="7" fill="#D77757"/>
+<rect x="71" y="95" width="7" height="7" fill="#D77757"/>
+<rect x="78" y="95" width="7" height="7" fill="#D77757"/>
+<rect x="85" y="95" width="7" height="7" fill="#D77757"/>
+<rect x="50" y="102" width="3.5" height="7" fill="#D77757"/>
+<rect x="64" y="102" width="3.5" height="7" fill="#D77757"/>
+<rect x="78" y="102" width="3.5" height="7" fill="#D77757"/>
+<rect x="92" y="102" width="3.5" height="7" fill="#D77757"/>
+<text x="117" y="83" fill="#F2F2F2" font-weight="700">Claude Code <tspan fill="#8B8B8B" font-weight="400">v2.1.321</tspan></text>
+<text x="117" y="101" fill="#8B8B8B">Opus 5.5 · Claude Pro</text>
+<text x="117" y="119" fill="#8B8B8B">~\Documents\GitHub\docs</text>
+<rect x="28" y="139" width="494.66666666666674" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="36" y="152" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Write the API reference pages from openapi.yaml.</tspan></text>
+
+<text x="36" y="188" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/authentication.md)</tspan></text>
+<text x="36" y="206" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Wrote 84 lines</tspan></text>
+
+<text x="36" y="242" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/projects.md)</tspan></text>
+<text x="36" y="260" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Wrote 132 lines</tspan></text>
+
+<text x="36" y="296" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/webhooks.md)</tspan></text>
+
+<text x="36" y="332" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Composing… </tspan><tspan fill="#8B8B8B">(6m 03s · ↓ 21.9k tokens)</tspan></text>
+<line x1="36" x2="514.6666666666667" y1="346" y2="346" stroke="#5A5A5A" stroke-width="1"/>
+<text x="36" y="368" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="36" x2="514.6666666666667" y1="382" y2="382" stroke="#5A5A5A" stroke-width="1"/>
+<text x="36" y="404" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
+</g>
+<rect x="20.5" y="20.5" width="509.6666666666667" height="399" rx="6" fill="none" stroke="#3C3C3C"/>
+<rect x="20" y="438" width="34" height="34" rx="6" fill="#1F2D3D" stroke="#6A6A6A"/>
+<text x="66" y="452" fill="#EEEEEE" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Working</text>
+<text x="66" y="470" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">Claude, a subagent, or a scheduled run is busy</text>
+<clipPath id="clip-544_6666666666667-20"><rect x="544.6666666666667" y="20" width="510.6666666666667" height="400" rx="6"/></clipPath>
+<g clip-path="url(#clip-544_6666666666667-20)">
+<rect x="544.6666666666667" y="20" width="510.6666666666667" height="400" fill="#29203B"/>
+<path d="M552.6666666666667 60 L552.6666666666667 34 Q552.6666666666667 28 558.6666666666667 28 L761.1466666666668 28 Q767.1466666666668 28 767.1466666666668 34 L767.1466666666668 60 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="564.6666666666667" y="38" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M567.6666666666667 41.5 L571.6666666666667 44.5 L567.6666666666667 47.5 M572.6666666666667 48 L576.6666666666667 48" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="588.6666666666667" y="49" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">✳ Chart tooltips</text>
+<path d="M747.1466666666668 41 L755.1466666666668 49 M755.1466666666668 41 L747.1466666666668 49" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M782.1466666666668 45 L792.1466666666668 45 M787.1466666666668 40 L787.1466666666668 50" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M813.1466666666668 43 L817.1466666666668 47 L821.1466666666668 43" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="932.3333333333335" x2="942.3333333333335" y1="40" y2="40" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="978.3333333333335" y="35" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1024.3333333333335 35 L1034.3333333333335 45 M1034.3333333333335 35 L1024.3333333333335 45" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="552.6666666666667" y="71" width="494.66666666666674" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="560.6666666666667" y="84" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Make the chart tooltips follow the cursor.</tspan></text>
+
+<text x="560.6666666666667" y="120" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm run dev)</tspan></text>
+<text x="560.6666666666667" y="138" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Running in the background (↓ to manage)</tspan></text>
+
+<text x="560.6666666666667" y="174" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/charts/Tooltip.tsx)</tspan></text>
+<text x="560.6666666666667" y="192" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 27 lines, removed 9 lines</tspan></text>
+
+<text x="560.6666666666667" y="228" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">The tooltips now follow the cursor and show both series. The</tspan></text>
+<text x="560.6666666666667" y="246" xml:space="preserve"><tspan fill="#CCCCCC">  </tspan><tspan fill="#CCCCCC">dev server is still up at http://localhost:5173.</tspan></text>
+
+<text x="560.6666666666667" y="282" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 4m 18s</tspan></text>
+<line x1="560.6666666666667" x2="1039.3333333333335" y1="346" y2="346" stroke="#5A5A5A" stroke-width="1"/>
+<text x="560.6666666666667" y="368" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="560.6666666666667" x2="1039.3333333333335" y1="382" y2="382" stroke="#5A5A5A" stroke-width="1"/>
+<text x="560.6666666666667" y="404" xml:space="preserve"><tspan fill="#8B8B8B">  </tspan><tspan fill="#4FB6BE">1 shell</tspan><tspan fill="#8B8B8B"> · ? for shortcuts</tspan></text>
+</g>
+<rect x="545.1666666666667" y="20.5" width="509.6666666666667" height="399" rx="6" fill="none" stroke="#3C3C3C"/>
+<rect x="544.6666666666667" y="438" width="34" height="34" rx="6" fill="#29203B" stroke="#6A6A6A"/>
+<text x="590.6666666666667" y="452" fill="#EEEEEE" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Standing by</text>
+<text x="590.6666666666667" y="470" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">only a background shell, such as a dev server, runs</text>
+<clipPath id="clip-1069_3333333333335-20"><rect x="1069.3333333333335" y="20" width="510.6666666666667" height="400" rx="6"/></clipPath>
+<g clip-path="url(#clip-1069_3333333333335-20)">
+<rect x="1069.3333333333335" y="20" width="510.6666666666667" height="400" fill="#0C0C0C"/>
+<path d="M1077.3333333333335 60 L1077.3333333333335 34 Q1077.3333333333335 28 1083.3333333333335 28 L1285.8133333333335 28 Q1291.8133333333335 28 1291.8133333333335 34 L1291.8133333333335 60 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="1089.3333333333335" y="38" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M1092.3333333333335 41.5 L1096.3333333333335 44.5 L1092.3333333333335 47.5 M1097.3333333333335 48 L1101.3333333333335 48" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="1113.3333333333335" y="49" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">✳ Release 2.4</text>
+<path d="M1271.8133333333335 41 L1279.8133333333335 49 M1279.8133333333335 41 L1271.8133333333335 49" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1306.8133333333335 45 L1316.8133333333335 45 M1311.8133333333335 40 L1311.8133333333335 50" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1337.8133333333335 43 L1341.8133333333335 47 L1345.8133333333335 43" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="1457.0000000000002" x2="1467.0000000000002" y1="40" y2="40" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1503.0000000000002" y="35" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1549.0000000000002 35 L1559.0000000000002 45 M1559.0000000000002 35 L1549.0000000000002 45" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1077.3333333333335" y="71" width="494.66666666666674" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="1085.3333333333335" y="84" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Get 2.4.0 ready to release.</tspan></text>
+
+<text x="1085.3333333333335" y="120" xml:space="preserve"><tspan fill="#8B8B8B">  Ran 3 shell commands</tspan></text>
+
+<text x="1085.3333333333335" y="156" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm test)</tspan></text>
+<text x="1085.3333333333335" y="174" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">58 passed, 0 failed</tspan></text>
+
+<text x="1085.3333333333335" y="210" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(CHANGELOG.md)</tspan></text>
+<text x="1085.3333333333335" y="228" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 14 lines</tspan></text>
+
+<text x="1085.3333333333335" y="264" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">All 58 tests pass and the changelog is updated for 2.4.0.</tspan></text>
+<text x="1085.3333333333335" y="282" xml:space="preserve"><tspan fill="#CCCCCC">  </tspan><tspan fill="#CCCCCC">Want me to open the pull request?</tspan></text>
+
+<text x="1085.3333333333335" y="318" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 6m 41s</tspan></text>
+<line x1="1085.3333333333335" x2="1564.0000000000002" y1="346" y2="346" stroke="#5A5A5A" stroke-width="1"/>
+<text x="1085.3333333333335" y="368" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="1085.3333333333335" x2="1564.0000000000002" y1="382" y2="382" stroke="#5A5A5A" stroke-width="1"/>
+<text x="1085.3333333333335" y="404" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
+</g>
+<rect x="1069.8333333333335" y="20.5" width="509.6666666666667" height="399" rx="6" fill="none" stroke="#3C3C3C"/>
+<rect x="1069.3333333333335" y="438" width="34" height="34" rx="6" fill="#0C0C0C" stroke="#6A6A6A"/>
+<text x="1115.3333333333335" y="452" fill="#EEEEEE" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Needs you</text>
+<text x="1115.3333333333335" y="470" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">your normal background: a question, a prompt, or done</text>
+<text x="20" y="506" fill="#A8A8A8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">You can change the colors: set <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">workingColor</tspan> and <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">standbyColor</tspan> in <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">CONFIG</tspan> at the top of <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">glance.mjs</tspan>. Needs you is always your terminal's own background.</text>
+</svg>
