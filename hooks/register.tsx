@@ -153,6 +153,55 @@ export function describeCheck(stdout: string): string {
   return lines.join('\n')
 }
 
+const COLOR = 'glance-color'
+const COLOR_NAMES: Record<string, string> = { workingColor: 'Working', standbyColor: 'Standing by' }
+type ColorReport = {
+  file?: string
+  colors?: Record<string, string>
+  defaults?: Record<string, string>
+  custom?: string[]
+  changed?: { action: string; key?: string; keys?: string[]; color?: string }
+  error?: string
+  paint?: string
+}
+
+/** Turns glance.mjs's /glance-color report into the command's output. */
+export function describeColor(stdout: string): string {
+  let r: ColorReport
+  try {
+    r = JSON.parse(stdout.trim().split('\n').pop() || '')
+  } catch {
+    return `${COLOR}: glance.mjs gave no report. Output: ${stdout.slice(0, 200) || '(empty)'}`
+  }
+  const colors = r.colors || {}
+  const lines: string[] = []
+  if (r.error) lines.push(`${COLOR}: ${r.error}.`)
+  else if (r.changed?.action === 'set' && r.changed.key) {
+    lines.push(`${COLOR_NAMES[r.changed.key]} is now ${r.changed.color}. Your other sessions switch at their next event, or run /${FIX} in one to repaint it now.`)
+  } else if (r.changed?.action === 'reset') {
+    const names = (r.changed.keys || []).map((k) => COLOR_NAMES[k]).join(' and ')
+    lines.push(`${names} ${r.changed.keys?.length === 1 ? 'is' : 'are'} back to the default.`)
+  }
+  if (r.paint?.startsWith('paint-failed')) lines.push(`Painting this pane failed (${r.paint}); see ~/.claude/state/glance/events.log.`)
+  if (lines.length) lines.push('')
+  const custom = new Set(r.custom || [])
+  for (const key of Object.keys(COLOR_NAMES)) {
+    const mark = custom.has(key) ? ` (default ${r.defaults?.[key]})` : ' (default)'
+    lines.push(`${COLOR_NAMES[key]}: ${colors[key] || 'unknown'}${mark}`)
+  }
+  lines.push("Needs you: your terminal's own background")
+  if (!r.changed) {
+    lines.push(
+      '',
+      `/${COLOR} standby #3A2A55   set a color (working or standby)`,
+      `/${COLOR} reset standby     put one back to the default`,
+      `/${COLOR} reset             put both back`,
+    )
+  }
+  if (r.file && custom.size) lines.push('', `Saved in ${r.file}.`)
+  return lines.join('\n')
+}
+
 // The surface the prompt band last drew on, for /glance-check's report.
 let lastSurface = 'unknown'
 // Where the last /glance-fix saved its snapshot, for /glance-report.
@@ -581,6 +630,12 @@ export const register: Register = (on) => {
       immediate: true,
     })
     await $.command.register({
+      name: COLOR,
+      description: 'Show or change the colors glance tints the pane with',
+      argumentHint: '[working|standby <#hex> | reset [working|standby]]',
+      immediate: true,
+    })
+    await $.command.register({
       name: REPORT,
       description: 'Have Claude research a glance problem (from the last /glance-fix, if any) and draft an issue for the glance maintainers',
     })
@@ -614,6 +669,14 @@ export const register: Register = (on) => {
     return { text: describe(r.stdout) }
   }).catch((_$, _e, next) => ({ text: `glance-fix failed: ${String(next.error)}` }))
 
+  on('command.run', { command: COLOR }, async ($, e) => {
+    const session_id = await $.session.id()
+    const r = await runOwn(() => glance($, { hook_event_name: 'GlanceColor', session_id, args: e.args }))
+    if ('error' in r) return { text: couldNotRun(COLOR, r.error) }
+    if (r.exitCode !== 0) return { text: `${COLOR}: glance.mjs exited ${r.exitCode}: ${r.stderr.slice(0, 300)}` }
+    return { text: describeColor(r.stdout) }
+  }).catch((_$, _e, next) => ({ text: `${COLOR} failed: ${String(next.error)}` }))
+
   on('command.run', { command: UPDATE }, async ($) => {
     const run = (argv: string[]) => $.process.run(argv, { timeoutMs: 120_000 })
     // claude plugin update and git pull can take a while, and isWorking is true the whole time.
@@ -631,7 +694,7 @@ export const register: Register = (on) => {
   /**
    * The desktop app's stand-in for the terminal tint: a full-width band above
    * the prompt, in the working color while glance says working and in the
-   * dimmer standby color while only a background shell runs, and nothing
+   * purple standby color while Claude waits on a background watch, and nothing
    * otherwise (needs you). The terminal is tinted by glance.mjs, so it passes.
    */
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

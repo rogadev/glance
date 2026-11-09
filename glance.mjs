@@ -17,9 +17,10 @@ export const CONFIG = {
   // Background while Claude, a subagent, or a scheduled run due soon is busy.
   workingColor: '#1F2D3D',
   // Background while Claude's turn is over and only a background shell (a dev
-  // server, a CI watch) still runs: halfway between a dark terminal and the
-  // working color, so slate always means Claude itself is busy.
-  standbyColor: '#161D25',
+  // server, a CI watch) still runs: a dark purple, a different hue from the
+  // working slate and the needs-you background, so slate always means Claude
+  // itself is busy.
+  standbyColor: '#29203B',
   // null resets to the Windows Terminal profile background (OSC 111).
   attentionColor: null,
   // Background work with no end signal after this long is treated as finished.
@@ -36,6 +37,9 @@ export const CONFIG = {
   // How long /glance-check shows the working color before putting the pane back.
   checkFlashMs: 1500,
   stateDir: path.join(os.homedir(), '.claude', 'state', 'glance'),
+  // The colors /glance-color saves, read on every run. Not in stateDir, where
+  // .json files a week old are pruned.
+  colorsFile: path.join(os.homedir(), '.claude', 'glance.json'),
   // events.log rotates at this size, keeping this many older files
   // (events.log.1 is the newest of them).
   logMaxBytes: 1024 * 1024,
@@ -43,6 +47,76 @@ export const CONFIG = {
   // The soonest glance asks the mod to check back on background work (Tick).
   recheckMinMs: 30 * 1000,
 };
+
+// The states /glance-color can change, and their keys in CONFIG and the colors
+// file. Needs you is always the terminal's own background.
+export const COLOR_KEYS = { working: 'workingColor', standby: 'standbyColor' };
+export const DEFAULT_COLORS = Object.freeze({ workingColor: CONFIG.workingColor, standbyColor: CONFIG.standbyColor });
+
+/**
+ * Normalizes a hex color: `#abc`, `abc`, and `#aabbcc` all become `#AABBCC`.
+ *
+ * @param {unknown} value
+ * @returns {string | null} The color, or null when it isn't one.
+ */
+export function normalizeColor(value) {
+  if (typeof value !== 'string') return null;
+  let hex = value.trim().replace(/^#/, '');
+  if (/^[0-9a-f]{3}$/i.test(hex)) hex = [...hex].map((c) => c + c).join('');
+  return /^[0-9a-f]{6}$/i.test(hex) ? '#' + hex.toUpperCase() : null;
+}
+
+/**
+ * Reads the colors file's text.
+ *
+ * @param {string} text
+ * @returns {{colors: Record<string, string>, problems: string[]}} The valid
+ *   colors, and what was wrong with the rest, for the log.
+ */
+export function parseColors(text) {
+  const colors = {};
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { colors, problems: ['not valid JSON'] };
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { colors, problems: ['not a JSON object'] };
+  const problems = [];
+  for (const key of Object.values(COLOR_KEYS)) {
+    if (!(key in raw)) continue;
+    const color = normalizeColor(raw[key]);
+    if (color) colors[key] = color;
+    else problems.push(`${key} ${JSON.stringify(raw[key])} is not a #RRGGBB color`);
+  }
+  return { colors, problems };
+}
+
+/**
+ * Parses what was typed after /glance-color.
+ *
+ * @param {string} args For example `standby #3A2A55`, `reset standby`, or ''.
+ * @returns {{action: 'show'} | {action: 'set', key: string, color: string} |
+ *   {action: 'reset', keys: string[]} | {error: string}}
+ */
+export function colorRequest(args) {
+  const words = String(args || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return { action: 'show' };
+  if (words[0] === 'reset') {
+    if (words.length === 1) return { action: 'reset', keys: Object.values(COLOR_KEYS) };
+    if (words.length === 2 && COLOR_KEYS[words[1]]) return { action: 'reset', keys: [COLOR_KEYS[words[1]]] };
+    return { error: `can't reset "${words.slice(1).join(' ')}": name working or standby, or nothing for both` };
+  }
+  if (['attention', 'needs', 'needs-you'].includes(words[0])) {
+    return { error: "needs you is always your terminal's own background, so glance leaves it alone. Change the background in your terminal's profile instead" };
+  }
+  const key = COLOR_KEYS[words[0]];
+  if (!key) return { error: `there's no "${words[0]}" color: glance has working and standby` };
+  if (words.length !== 2) return { error: `give one color after ${words[0]}, such as /glance-color ${words[0]} #3A2A55` };
+  const color = normalizeColor(words[1]);
+  if (!color) return { error: `"${words[1]}" isn't a hex color such as #3A2A55` };
+  return { action: 'set', key, color };
+}
 
 export const WORKING = 'working';
 export const STANDBY = 'standby';
@@ -101,9 +175,32 @@ export function endedTaskIds(prompt) {
 const SCHEDULED = new Set(['wakeup', 'cron']);
 
 // Background work that is Claude itself working, so it holds the working
-// color. Anything else that isn't scheduled (a shell, a monitor) only holds
-// the standby color: it may be a dev server nobody is waiting on.
+// color. A shell or a monitor holds the standby color only when Claude started
+// it to wait on something (see waitsFor); anything else, such as a dev server
+// or a plugin's own monitor, leaves a finished turn on needs you.
 const ACTIVE = new Set(['agent', 'workflow']);
+
+// Shell commands that wait for something and then end, so Claude is resumed
+// when they do: a CI watch (/land runs `gh pr checks --watch`), or a poll loop.
+// Not a bare --watch, which also starts file watchers (tsc --watch) that never end.
+const WAIT_COMMANDS = [
+  /\bgh\s+(?:pr\s+checks|run\s+watch)\b[^|;&]*(?:--watch|\bwatch\b)/,
+  /\bgh\s+run\s+watch\b/,
+  /\b(?:until|while)\b[\s\S]*\bsleep\b/,
+  /^\s*sleep\s+\d/,
+  /\bkubectl\s+rollout\s+status\b/,
+];
+
+/**
+ * True when a background shell command waits for something and then ends,
+ * rather than running until stopped (a dev server, a file watcher).
+ *
+ * @param {unknown} command The shell's command line.
+ * @returns {boolean}
+ */
+export function waitsFor(command) {
+  return typeof command === 'string' && WAIT_COMMANDS.some((re) => re.test(command));
+}
 
 // What glance calls the task types Claude Code lists in background_tasks.
 const TASK_KINDS = { subagent: 'agent' };
@@ -239,7 +336,7 @@ export function diagnoseReset(prev, input, now) {
     return {
       verdict: 'stale-background',
       suspect: false,
-      cause: `glance was keeping the tint for background work it never heard finish: ${stale.join(', ')}. A shell left running, such as a dev server, holds the dimmer standby tint for up to an hour.`,
+      cause: `glance was keeping the tint for background work it never heard finish: ${stale.join(', ')}. A shell left running, such as a dev server, holds the purple standby tint for up to an hour.`,
     };
   }
   if (listed.length) {
@@ -285,9 +382,13 @@ function holdsWorking(background, now) {
   return Object.values(background).some((item) => (SCHEDULED.has(item.kind) ? scheduleHoldsTint(item, now) : ACTIVE.has(item.kind)));
 }
 
-/** True when a background shell, or another task that isn't Claude working, is live. */
+/**
+ * True when a live shell or monitor is one Claude started to wait on (a CI
+ * watch, a poll), so it will resume Claude when it ends. One glance only
+ * learned of from background_tasks, or one that runs until stopped, doesn't count.
+ */
 function holdsStandby(background) {
-  return Object.values(background).some((item) => !SCHEDULED.has(item.kind) && !ACTIVE.has(item.kind));
+  return Object.values(background).some((item) => !SCHEDULED.has(item.kind) && !ACTIVE.has(item.kind) && item.waits === true);
 }
 
 /** Records or clears scheduled runs from the tools that manage them. */
@@ -388,7 +489,11 @@ export function decide(prev, input, now) {
     case 'PostToolUseFailure':
     case 'ElicitationResult': {
       const shellId = input.tool_response?.backgroundTaskId;
-      if (shellId) background[shellId] = { kind: 'shell', at: now };
+      if (shellId) background[shellId] = { kind: 'shell', at: now, waits: waitsFor(input.tool_input?.command) };
+      // A monitor Claude starts waits for events that resume it, unless it's
+      // persistent (one that runs for the whole session, like a log tail).
+      const monitorId = input.tool_name === 'Monitor' && event === 'PostToolUse' ? input.tool_response?.taskId : undefined;
+      if (monitorId) background[monitorId] = { kind: 'monitor', at: now, waits: input.tool_response.persistent !== true };
       // A shell stopped with TaskStop gets no task notification, so its
       // PostToolUse is the only sign it ended. A failed stop keeps it.
       if (event === 'PostToolUse' && STOP_TOOLS.has(input.tool_name)) {
@@ -524,6 +629,78 @@ export function detectTerminal(env, platform = process.platform) {
   for (const [name, test, support] of TERMINALS) if (test(env)) return { name, support };
   if (platform === 'win32' && !env.TERM_PROGRAM) return { name: 'Windows console (conhost)', support: 'unknown' };
   return { name: env.TERM_PROGRAM || env.TERM || 'unknown', support: 'unknown' };
+}
+
+/**
+ * Reads the colors file into CONFIG. A missing file means the defaults; a bad
+ * one, or a bad value in it, is logged and that color keeps its default.
+ *
+ * @returns {Record<string, string>} The colors the file sets.
+ */
+function loadColors() {
+  let text;
+  try {
+    text = fs.readFileSync(CONFIG.colorsFile, 'utf8');
+  } catch (err) {
+    if (err.code !== 'ENOENT') log(`${new Date().toISOString()} colors-unreadable ${CONFIG.colorsFile} ${err.code || err.message}`);
+    return {};
+  }
+  const { colors, problems } = parseColors(text);
+  Object.assign(CONFIG, colors);
+  if (problems.length) log(`${new Date().toISOString()} colors-ignored ${CONFIG.colorsFile}: ${problems.join('; ')}`);
+  return colors;
+}
+
+/** Saves the colors file, or removes it when every color is back to its default. */
+function saveColors(colors) {
+  if (!Object.keys(colors).length) {
+    fs.rmSync(CONFIG.colorsFile, { force: true });
+    return;
+  }
+  fs.mkdirSync(path.dirname(CONFIG.colorsFile), { recursive: true });
+  // Written whole, then renamed, so a hook that reads it meanwhile never sees half a file.
+  const tmp = `${CONFIG.colorsFile}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(colors, null, 2) + '\n');
+  fs.renameSync(tmp, CONFIG.colorsFile);
+}
+
+/**
+ * /glance-color: shows the colors, or changes one and repaints this pane in
+ * it. Other sessions read the file at their next event. Changes no state.
+ */
+function color(input, stateFile, saved) {
+  const req = colorRequest(input.args);
+  const report = { file: CONFIG.colorsFile, defaults: DEFAULT_COLORS };
+  let custom = { ...saved };
+  if (req.error) report.error = req.error;
+  else if (req.action !== 'show') {
+    const next = { ...saved };
+    if (req.action === 'set') next[req.key] = req.color;
+    else for (const key of req.keys) delete next[key];
+    try {
+      saveColors(next);
+      custom = next;
+      Object.assign(CONFIG, DEFAULT_COLORS, next);
+      report.changed = req;
+    } catch (err) {
+      report.error = `couldn't save ${CONFIG.colorsFile} (${err.code || err.message})`;
+    }
+  }
+  report.colors = { workingColor: CONFIG.workingColor, standbyColor: CONFIG.standbyColor };
+  report.custom = Object.keys(custom);
+  let state = emptyState();
+  withLock(stateFile + '.lock', () => {
+    state = readState(stateFile);
+    if (report.changed) report.paint = paint(osc(state.state));
+  });
+  const what = report.error ? 'error' : report.changed ? report.changed.action : 'show';
+  log(
+    `${new Date().toISOString()} ${String(input.session_id || '').slice(0, 8)} main GlanceColor ${what} ` +
+      `working:${CONFIG.workingColor} standby:${CONFIG.standbyColor}${report.paint ? ' ' + report.paint : ''}`,
+  );
+  // The state line first, as apply() prints it, so the mod's band takes the new color.
+  if (input.glance_via === 'mod') process.stdout.write(stateLine(state, Date.now()) + '\n');
+  process.stdout.write(JSON.stringify(report) + '\n');
 }
 
 /**
@@ -831,9 +1008,11 @@ function main() {
   if (process.env.GLANCE_DEBUG || fs.existsSync(path.join(CONFIG.stateDir, 'debug'))) {
     fs.appendFileSync(path.join(CONFIG.stateDir, 'debug.jsonl'), raw.trim() + '\n');
   }
+  const saved = loadColors();
   const stateFile = path.join(CONFIG.stateDir, safeId(input.session_id) + '.json');
-  // /glance-check changes no state; it takes the lock only for its restore.
+  // /glance-check and /glance-color change no state; they take the lock only to repaint.
   if (input.hook_event_name === 'GlanceCheck') return check(input, stateFile);
+  if (input.hook_event_name === 'GlanceColor') return color(input, stateFile, saved);
   // UiIdle arrives the moment the engine stops working. Wait out the confirm
   // window first, so decide() sees any hook that lands meanwhile (a new prompt,
   // the next tool) and leaves the tint alone.

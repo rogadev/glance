@@ -60,19 +60,20 @@ test('GlanceReset prints the summary /glance-fix shows', (t) => {
     hook_event_name: 'PostToolUse',
     session_id: sid,
     tool_name: 'Bash',
-    tool_response: { backgroundTaskId: 'devserver' },
+    tool_input: { run_in_background: true, command: 'gh pr checks 19 --watch' },
+    tool_response: { backgroundTaskId: 'ciwatch' },
   });
   hook(dir, { hook_event_name: 'Stop', session_id: sid });
   const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: ['a1', 'a2'] });
   const summary = JSON.parse(r.stdout.trim());
   assert.equal(summary.was, 'standby [shell-running]');
-  assert.deepEqual(summary.dropped, ['shell devserver']);
+  assert.deepEqual(summary.dropped, ['shell ciwatch']);
   assert.deepEqual(summary.kept, []);
   assert.equal(summary.diagnosis.verdict, 'stale-background');
   // The snapshot keeps the background work and the agent count, which the
   // report skill reads as evidence.
   const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
-  assert.deepEqual(snap.before.background, [{ id: 'devserver', kind: 'shell', started_min_ago: 0 }]);
+  assert.deepEqual(snap.before.background, [{ id: 'ciwatch', kind: 'shell', started_min_ago: 0 }]);
   assert.equal(snap.live_agents, 2);
 });
 
@@ -81,19 +82,19 @@ test('Stop reconciles with the task list Claude Code sends, and the state line a
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const sid = 'smoke-10';
   hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
-  for (const id of ['devserver', 'finished']) {
-    hook(dir, { hook_event_name: 'PostToolUse', session_id: sid, tool_name: 'Bash', tool_response: { backgroundTaskId: id } });
+  for (const id of ['ciwatch', 'finished']) {
+    hook(dir, { hook_event_name: 'PostToolUse', session_id: sid, tool_name: 'Bash', tool_input: { command: 'gh pr checks 19 --watch' }, tool_response: { backgroundTaskId: id } });
   }
   const r = hook(dir, {
     hook_event_name: 'Stop',
     session_id: sid,
-    background_tasks: [{ id: 'devserver', type: 'shell', status: 'running', description: 'dev', command: 'pnpm dev' }],
+    background_tasks: [{ id: 'ciwatch', type: 'shell', status: 'running', description: 'CI', command: 'gh pr checks 19 --watch' }],
     session_crons: [],
     glance_via: 'mod',
   });
   const line = JSON.parse(r.stdout.trim());
   assert.equal(line.state, 'standby');
-  assert.equal(line.color, '#161D25');
+  assert.equal(line.color, '#29203B');
   assert.ok(line.recheck_in_ms > 59 * 60 * 1000 && line.recheck_in_ms <= 60 * 60 * 1000, `recheck_in_ms ${line.recheck_in_ms}`);
   assert.match(lastLog(state), /Stop \(via:mod\) -> standby \[shell-running\] bg=1 \(-shell finished\) /);
   // The snapshot says Claude Code listed the shell, which the diagnosis reads.
@@ -101,7 +102,7 @@ test('Stop reconciles with the task list Claude Code sends, and the state line a
   const summary = JSON.parse(fix.stdout.trim());
   assert.equal(summary.diagnosis.verdict, 'background-running');
   const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
-  assert.deepEqual(snap.before.background, [{ id: 'devserver', kind: 'shell', started_min_ago: 0, listed_running_min_ago: 0 }]);
+  assert.deepEqual(snap.before.background, [{ id: 'ciwatch', kind: 'shell', started_min_ago: 0, listed_running_min_ago: 0 }]);
 });
 
 test('a Tick clears a standby pane whose shell expired, with no other event', (t) => {
@@ -315,4 +316,55 @@ test('UiIdle waits out the confirm window itself, then clears a pane no hook has
   const after = JSON.parse(fs.readFileSync(path.join(state, `${sid}.json`), 'utf8'));
   assert.equal(after.state, 'attention');
   assert.equal(after.reason, 'ui-idle');
+});
+
+test('GlanceColor saves a color that the next event in any session paints with', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, '.claude', 'glance.json');
+
+  const set = hook(dir, { hook_event_name: 'GlanceColor', session_id: 'smoke-c1', args: 'standby #3a2a55', glance_via: 'mod' });
+  const report = JSON.parse(set.stdout.trim().split('\n').pop());
+  assert.deepEqual(report.changed, { action: 'set', key: 'standbyColor', color: '#3A2A55' });
+  assert.deepEqual(report.custom, ['standbyColor']);
+  assert.equal(report.paint, 'paint-skipped:disabled');
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { standbyColor: '#3A2A55' });
+  assert.match(lastLog(state), / smoke-c1 main GlanceColor set working:#1F2D3D standby:#3A2A55 /);
+
+  // Another session's shell holds standby, in the new color.
+  const sid = 'smoke-c2';
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
+  hook(dir, {
+    hook_event_name: 'PostToolUse',
+    session_id: sid,
+    tool_name: 'Bash',
+    tool_input: { run_in_background: true, command: 'gh pr checks 19 --watch' },
+    tool_response: { backgroundTaskId: 'b1' },
+  });
+  const stop = hook(dir, { hook_event_name: 'Stop', session_id: sid, glance_via: 'mod', background_tasks: [{ id: 'b1', type: 'shell' }] });
+  assert.deepEqual(JSON.parse(stop.stdout.split('\n')[0]), { state: 'standby', color: '#3A2A55', recheck_in_ms: JSON.parse(stop.stdout.split('\n')[0]).recheck_in_ms });
+
+  hook(dir, { hook_event_name: 'GlanceColor', session_id: 'smoke-c1', args: 'reset' });
+  assert.equal(fs.existsSync(file), false);
+});
+
+test('a bad colors file is logged and its bad color keeps the default', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.claude', 'glance.json'), '{"workingColor":"blue","standbyColor":"#123456"}');
+  const r = hook(dir, { hook_event_name: 'GlanceColor', session_id: 'smoke-c3', args: '', glance_via: 'mod' });
+  const report = JSON.parse(r.stdout.trim().split('\n').pop());
+  assert.deepEqual(report.colors, { workingColor: '#1F2D3D', standbyColor: '#123456' });
+  assert.equal(report.changed, undefined);
+  const log = fs.readFileSync(path.join(state, 'events.log'), 'utf8');
+  assert.match(log, /colors-ignored .*glance\.json: workingColor "blue" is not a #RRGGBB color/);
+});
+
+test('GlanceColor refuses a bad color and saves nothing', (t) => {
+  const { dir } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const r = hook(dir, { hook_event_name: 'GlanceColor', session_id: 'smoke-c4', args: 'standby purple' });
+  assert.match(JSON.parse(r.stdout.trim().split('\n').pop()).error, /isn't a hex color/);
+  assert.equal(fs.existsSync(path.join(dir, '.claude', 'glance.json')), false);
 });

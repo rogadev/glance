@@ -3,18 +3,22 @@ import assert from 'node:assert/strict';
 import {
   ancestorTtyFrom,
   backgroundChanges,
+  colorRequest,
   decide,
   detectTerminal,
   diagnoseReset,
   emptyState,
   endedTaskIds,
+  normalizeColor,
   osc,
+  parseColors,
   recheckAt,
   stateLine,
   CONFIG,
   WORKING,
   STANDBY,
   ATTENTION,
+  waitsFor,
 } from '../glance.mjs';
 
 const T = 1_000_000;
@@ -45,8 +49,8 @@ const notice = (id, status = 'killed') =>
   `<summary>x</summary>\n</task-notification>`;
 
 // A Bash call with run_in_background, as PostToolUse reports it.
-const bgShell = (id) =>
-  main('PostToolUse', { tool_name: 'Bash', tool_input: { run_in_background: true }, tool_response: { backgroundTaskId: id } });
+const bgShell = (id, command = 'gh pr checks 19 --watch') =>
+  main('PostToolUse', { tool_name: 'Bash', tool_input: { run_in_background: true, command }, tool_response: { backgroundTaskId: id } });
 
 test('a manual /compact is working, then needs you when PostCompact arrives', () => {
   const during = run([main('Stop'), main('PreCompact', { trigger: 'manual' })]);
@@ -148,7 +152,7 @@ test('a notification for one task leaves the others running', () => {
   assert.deepEqual(ids(s), ['a2']);
 });
 
-test('a background shell (a CI watch, a dev server) puts the pane on standby after Stop, not working', () => {
+test('a background shell Claude waits on (a CI watch) puts the pane on standby after Stop, not working', () => {
   const waiting = run([main('UserPromptSubmit'), bgShell('b37q4qei1'), main('Stop')]);
   assert.equal(waiting.state, STANDBY);
   assert.equal(waiting.reason, 'shell-running');
@@ -669,9 +673,40 @@ test('Stop adds background work Claude Code lists that glance never heard start'
   );
 });
 
-test('a workflow Claude Code lists holds the working color, and a monitor only standby', () => {
+test('a workflow Claude Code lists holds the working color, and a shell or monitor glance never saw start holds nothing', () => {
   assert.equal(run([main('Stop', { background_tasks: [task('w1', 'workflow')] })]).state, WORKING);
-  assert.equal(run([main('Stop', { background_tasks: [task('m1', 'monitor')] })]).state, STANDBY);
+  // Seen live (2026-11-09): a plugin's monitor was listed at every Stop of a
+  // session, and kept a finished pane on standby until /glance-fix, four times.
+  assert.equal(run([main('Stop', { background_tasks: [task('m1', 'monitor')] })]).state, ATTENTION);
+  assert.equal(run([main('Stop', { background_tasks: [task('b1', 'shell')] })]).state, ATTENTION);
+});
+
+test('a dev server or file watcher left running ends the turn on needs you, though it is still tracked', () => {
+  // Seen live (2026-11-09): Claude started `pnpm dev:start`, tested in Chrome,
+  // and handed back; the pane stayed on standby while Claude waited on the user.
+  for (const command of ['pnpm dev:start', 'npm run dev', 'tsc --watch']) {
+    const s = run([main('UserPromptSubmit'), bgShell('dev', command), main('Stop', { background_tasks: [task('dev')] })]);
+    assert.equal(s.state, ATTENTION, command);
+    assert.deepEqual(ids(s), ['dev']);
+  }
+});
+
+test('a monitor Claude starts holds standby after Stop, unless it is persistent', () => {
+  const monitor = (id, persistent) =>
+    main('PostToolUse', { tool_name: 'Monitor', tool_input: { command: 'gh pr checks 394' }, tool_response: { taskId: id, timeoutMs: 1_800_000, persistent } });
+  const ci = run([main('UserPromptSubmit'), monitor('m1', false), main('Stop', { background_tasks: [task('m1', 'monitor')] })]);
+  assert.equal(ci.state, STANDBY);
+  const tail = run([main('UserPromptSubmit'), monitor('m2', true), main('Stop', { background_tasks: [task('m2', 'monitor')] })]);
+  assert.equal(tail.state, ATTENTION);
+});
+
+test('waitsFor tells a wait that ends from a command that runs until stopped', () => {
+  for (const yes of ['gh pr checks 19 --watch', 'gh run watch 123', 'until grep -q Ready log; do sleep 1; done', 'while true; do gh pr checks 1; sleep 30; done', 'sleep 300']) {
+    assert.equal(waitsFor(yes), true, yes);
+  }
+  for (const no of ['pnpm dev', 'npm run dev', 'tsc --watch', 'vite', 'gh pr checks 19', 'docker compose up', undefined]) {
+    assert.equal(waitsFor(no), false, String(no));
+  }
 });
 
 test('Stop with no task list (an older Claude Code) keeps what glance tracked', () => {
@@ -805,4 +840,34 @@ test('/glance-fix on a standby pane names the shell Claude Code listed as runnin
   assert.match(d.cause, /shell dev \(started 5 min ago, listed as running 5 min ago\)/);
   // The reset still drops it: the pane is yours to clear.
   assert.deepEqual(ids(run([main('GlanceReset', { live_agents: [] })], s)), []);
+});
+
+test('normalizeColor takes three or six hex digits, with or without #, and nothing else', () => {
+  assert.equal(normalizeColor('#3a2a55'), '#3A2A55');
+  assert.equal(normalizeColor('3A2A55'), '#3A2A55');
+  assert.equal(normalizeColor(' #abc '), '#AABBCC');
+  for (const bad of ['purple', '#12345', '#1234567', '#GGGGGG', '', null, 42]) assert.equal(normalizeColor(bad), null, String(bad));
+});
+
+test('parseColors keeps the good colors and names the bad ones', () => {
+  assert.deepEqual(parseColors('{"workingColor":"#112233","standbyColor":"nope"}'), {
+    colors: { workingColor: '#112233' },
+    problems: ['standbyColor "nope" is not a #RRGGBB color'],
+  });
+  assert.deepEqual(parseColors('{"standbyColor":"#abc","other":1}'), { colors: { standbyColor: '#AABBCC' }, problems: [] });
+  assert.deepEqual(parseColors('{oops'), { colors: {}, problems: ['not valid JSON'] });
+  assert.deepEqual(parseColors('[1]'), { colors: {}, problems: ['not a JSON object'] });
+});
+
+test('colorRequest reads show, set, and reset, and explains anything else', () => {
+  assert.deepEqual(colorRequest(''), { action: 'show' });
+  assert.deepEqual(colorRequest('  Standby  #3a2a55 '), { action: 'set', key: 'standbyColor', color: '#3A2A55' });
+  assert.deepEqual(colorRequest('working 223344'), { action: 'set', key: 'workingColor', color: '#223344' });
+  assert.deepEqual(colorRequest('reset'), { action: 'reset', keys: ['workingColor', 'standbyColor'] });
+  assert.deepEqual(colorRequest('reset standby'), { action: 'reset', keys: ['standbyColor'] });
+  assert.match(colorRequest('reset everything').error, /name working or standby/);
+  assert.match(colorRequest('attention #000000').error, /terminal's own background/);
+  assert.match(colorRequest('busy #000000').error, /no "busy" color/);
+  assert.match(colorRequest('standby').error, /give one color/);
+  assert.match(colorRequest('standby purple').error, /isn't a hex color/);
 });

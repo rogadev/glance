@@ -5,6 +5,7 @@ import {
   checkDue,
   describe,
   describeCheck,
+  describeColor,
   isNewer,
   marketplaceOf,
   parsePane,
@@ -161,7 +162,7 @@ test('/glance-report asks Claude to run the report skill on the last /glance-fix
 
 const WORKING = JSON.stringify({ state: 'working', color: '#1F2D3D' }) + '\n'
 const ATTENTION = JSON.stringify({ state: 'attention', color: '#1F2D3D' }) + '\n'
-const STANDBY = JSON.stringify({ state: 'standby', color: '#161D25' }) + '\n'
+const STANDBY = JSON.stringify({ state: 'standby', color: '#29203B' }) + '\n'
 
 // The engine's own drawing of the band, beneath the plugin: one line reading "engine".
 function engineBand(on: Parameters<Parameters<typeof test>[1]>[1]) {
@@ -501,18 +502,18 @@ test('parsePane takes only a well-formed state line', async () => {
   expect(parsePane('{"state":"busy","color":"#1F2D3D"}')).toBeNull()
   expect(parsePane('{"state":"working"}')).toBeNull()
   expect(parsePane('')).toBeNull()
-  expect(parsePane(STANDBY)).toEqual({ state: 'standby', color: '#161D25' })
+  expect(parsePane(STANDBY)).toEqual({ state: 'standby', color: '#29203B' })
 })
 
 test('recheckOf reads how long to wait for the Tick, and 0 when the state line asks for none', () => {
-  expect(recheckOf('{"state":"standby","color":"#161D25","recheck_in_ms":60000}\n{"was":"x"}')).toBe(60000)
+  expect(recheckOf('{"state":"standby","color":"#29203B","recheck_in_ms":60000}\n{"was":"x"}')).toBe(60000)
   expect(recheckOf(WORKING)).toBe(0)
   expect(recheckOf('{"recheck_in_ms":"soon"}')).toBe(0)
   expect(recheckOf('{"recheck_in_ms":-5}')).toBe(0)
   expect(recheckOf('')).toBe(0)
 })
 
-test('the desktop shows a dimmer band while only a background task runs', async ($, on) => {
+test('the desktop shows the standby band while only a background task runs', async ($, on) => {
   engineBand(on)
   on('session.id', () => ({ value: 'sess-1' }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: STANDBY, stderr: '' } }))
@@ -526,7 +527,7 @@ test('the desktop shows a dimmer band while only a background task runs', async 
 
 test('a state line that asks to be checked on gets one Tick when its time comes, however many events asked', async ($, on) => {
   const runs: any[] = []
-  let stdout = JSON.stringify({ state: 'standby', color: '#161D25', recheck_in_ms: 60_000 }) + '\n'
+  let stdout = JSON.stringify({ state: 'standby', color: '#29203B', recheck_in_ms: 60_000 }) + '\n'
   on('session.id', () => ({ value: 'sess-1' }))
   on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout, stderr: '' } }))
   on('classic.Stop', () => ({}))
@@ -547,7 +548,7 @@ test('a state line that asks to be checked on gets one Tick when its time comes,
 
 test('a state line that no longer asks to be checked on cancels the Tick', async ($, on) => {
   const runs: any[] = []
-  let stdout = JSON.stringify({ state: 'standby', color: '#161D25', recheck_in_ms: 60_000 }) + '\n'
+  let stdout = JSON.stringify({ state: 'standby', color: '#29203B', recheck_in_ms: 60_000 }) + '\n'
   on('session.id', () => ({ value: 'sess-1' }))
   on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout, stderr: '' } }))
   on('classic.Stop', () => ({}))
@@ -915,4 +916,45 @@ test('a command that fails to register never holds up or fails session start', a
   const r = await $.session.start(START)
   expect(r.cwd).toBe(START.cwd)
   expect(starts.length).toBe(1)
+})
+
+const colorReport = (extra: object) =>
+  JSON.stringify({
+    file: '/home/u/.claude/glance.json',
+    defaults: { workingColor: '#1F2D3D', standbyColor: '#29203B' },
+    colors: { workingColor: '#1F2D3D', standbyColor: '#29203B' },
+    custom: [],
+    ...extra,
+  })
+
+test('/glance-color sends GlanceColor with what was typed and shows the result', async ($, on) => {
+  const runs: any[] = []
+  const out = colorReport({
+    colors: { workingColor: '#1F2D3D', standbyColor: '#3A2A55' },
+    custom: ['standbyColor'],
+    changed: { action: 'set', key: 'standbyColor', color: '#3A2A55' },
+    paint: 'ok',
+  })
+  engine(on, runs, JSON.stringify({ state: 'standby', color: '#3A2A55' }) + '\n' + out + '\n')
+  on('command.run', () => ({ text: 'engine ran it' }))
+  const r = await $.command.run({ command: 'glance-color', args: 'standby #3a2a55' })
+  expect(stdinOf(runs[0])).toEqual({ hook_event_name: 'GlanceColor', session_id: 'sess-1', args: 'standby #3a2a55', glance_via: 'mod' })
+  expect(r.text).toContain('Standing by is now #3A2A55.')
+  expect(r.text).toContain('Standing by: #3A2A55 (default #29203B)')
+  expect(r.text).toContain('Saved in /home/u/.claude/glance.json.')
+})
+
+test('/glance-color with nothing after it lists the colors and how to change them', () => {
+  const text = describeColor(colorReport({}))
+  expect(text).toContain('Working: #1F2D3D (default)')
+  expect(text).toContain("Needs you: your terminal's own background")
+  expect(text).toContain('/glance-color reset standby')
+  expect(text).not.toContain('Saved in')
+})
+
+test('/glance-color explains a refused value, and reports a reset', () => {
+  expect(describeColor(colorReport({ error: '"purple" isn\'t a hex color such as #3A2A55' }))).toContain('glance-color: "purple" isn\'t a hex color')
+  const reset = describeColor(colorReport({ changed: { action: 'reset', keys: ['workingColor', 'standbyColor'] } }))
+  expect(reset).toContain('Working and Standing by are back to the default.')
+  expect(describeColor('not json')).toContain('glance.mjs gave no report')
 })

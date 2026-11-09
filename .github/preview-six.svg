@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Cascadia Mono, Consolas, Menlo, monospace" font-size="12.5">
+<title>glance: six Claude Code sessions, two waiting on you</title>
+<rect width="1600" height="900" fill="#1B1B1B"/>
+<clipPath id="clip-0-0"><rect x="0" y="0" width="532" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-0-0)">
+<rect x="0" y="0" width="532" height="425" fill="#1F2D3D"/>
+<path d="M8 40 L8 14 Q8 8 14 8 L225.44 8 Q231.44 8 231.44 14 L231.44 40 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="20" y="18" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M23 21.5 L27 24.5 L23 27.5 M28 28 L32 28" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="44" y="29" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ Add rate limiting</text>
+<path d="M211.44 21 L219.44 29 M219.44 21 L211.44 29" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M246.44 25 L256.44 25 M251.44 20 L251.44 30" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M277.44 23 L281.44 27 L285.44 23" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="409" x2="419" y1="20" y2="20" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="455" y="15" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M501 15 L511 25 M511 15 L501 25" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="8" y="51" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="16" y="64" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Add rate limiting to the public endpoints, 100 requests a minute</tspan></text>
+<rect x="8" y="69" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="16" y="82" xml:space="preserve"><tspan fill="#8B8B8B">  </tspan><tspan fill="#F2F2F2">per API key.</tspan></text>
+
+<text x="16" y="118" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">I'll add a token-bucket limiter as middleware and apply it to</tspan></text>
+<text x="16" y="136" xml:space="preserve"><tspan fill="#CCCCCC">  </tspan><tspan fill="#CCCCCC">the public router.</tspan></text>
+
+<text x="16" y="172" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/middleware/rateLimit.ts)</tspan></text>
+<text x="16" y="190" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 42 lines</tspan></text>
+
+<text x="16" y="226" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(src/routes/public.ts)</tspan></text>
+<text x="16" y="244" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 2 lines, removed 1 line</tspan></text>
+
+<text x="16" y="280" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm test -- rateLimit)</tspan></text>
+<text x="16" y="298" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Running…</tspan></text>
+
+<text x="16" y="334" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Brewing… </tspan><tspan fill="#8B8B8B">(1m 12s · ↓ 4.1k tokens)</tspan></text>
+<line x1="16" x2="516" y1="351" y2="351" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="373" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="16" x2="516" y1="387" y2="387" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="409" xml:space="preserve"><tspan fill="#D77757">  ⏵⏵ accept edits on</tspan><tspan fill="#8B8B8B"> (shift+tab to cycle)</tspan></text>
+</g>
+<rect x="0.5" y="0.5" width="531" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-534-0"><rect x="534" y="0" width="532" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-534-0)">
+<rect x="534" y="0" width="532" height="425" fill="#1F2D3D"/>
+<path d="M542 40 L542 14 Q542 8 548 8 L759.44 8 Q765.44 8 765.44 14 L765.44 40 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="554" y="18" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M557 21.5 L561 24.5 L557 27.5 M562 28 L566 28" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="578" y="29" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ Landing page refresh</text>
+<path d="M745.44 21 L753.44 29 M753.44 21 L745.44 29" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M780.44 25 L790.44 25 M785.44 20 L785.44 30" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M811.44 23 L815.44 27 L819.44 23" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="943" x2="953" y1="20" y2="20" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="989" y="15" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1035 15 L1045 25 M1045 15 L1035 25" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="542" y="51" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="550" y="64" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Audit the landing page, then tighten up the hero section.</tspan></text>
+
+<text x="550" y="100" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">Splitting the audit three ways so it goes faster.</tspan></text>
+
+<text x="550" y="136" xml:space="preserve"><tspan fill="#8B8B8B">  Launched 3 background agents (↓ to manage)</tspan></text>
+
+<text x="550" y="172" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">While they run, I'm tightening the hero section.</tspan></text>
+
+<text x="550" y="208" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Read</tspan><tspan fill="#CCCCCC">(src/components/Hero.astro)</tspan></text>
+<text x="550" y="226" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Read 88 lines</tspan></text>
+
+<text x="550" y="262" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Pondering… </tspan><tspan fill="#8B8B8B">(3m 40s · ↓ 12.6k tokens)</tspan></text>
+<line x1="550" x2="1050" y1="351" y2="351" stroke="#5A5A5A" stroke-width="1"/>
+<text x="550" y="373" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="550" x2="1050" y1="387" y2="387" stroke="#5A5A5A" stroke-width="1"/>
+<text x="550" y="409" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan><tspan fill="#8B8B8B"> · </tspan><tspan fill="#4FB6BE">3 agents</tspan></text>
+</g>
+<rect x="534.5" y="0.5" width="531" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-1068-0"><rect x="1068" y="0" width="532" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-1068-0)">
+<rect x="1068" y="0" width="532" height="425" fill="#0C0C0C"/>
+<path d="M1076 40 L1076 14 Q1076 8 1082 8 L1293.44 8 Q1299.44 8 1299.44 14 L1299.44 40 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="1088" y="18" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M1091 21.5 L1095 24.5 L1091 27.5 M1096 28 L1100 28" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="1112" y="29" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">✳ Push notifications</text>
+<path d="M1279.44 21 L1287.44 29 M1287.44 21 L1279.44 29" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1314.44 25 L1324.44 25 M1319.44 20 L1319.44 30" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1345.44 23 L1349.44 27 L1353.44 23" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="1477" x2="1487" y1="20" y2="20" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1523" y="15" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1569 15 L1579 25 M1579 15 L1569 25" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1076" y="51" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="1084" y="64" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Add push notifications for new messages.</tspan></text>
+
+<text x="1084" y="100" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">The notification module needs one new package.</tspan></text>
+<line x1="1084" x2="1584" y1="243" y2="243" stroke="#5A5A5A" stroke-width="1"/>
+<text x="1084" y="265" xml:space="preserve"><tspan fill="#7AA2F7" font-weight="700"> Bash command</tspan></text>
+
+<text x="1084" y="301" xml:space="preserve"><tspan fill="#CCCCCC">   pnpm add expo-notifications</tspan></text>
+<text x="1084" y="319" xml:space="preserve"><tspan fill="#8B8B8B">   Install the notifications SDK</tspan></text>
+
+<text x="1084" y="355" xml:space="preserve"><tspan fill="#CCCCCC"> Do you want to proceed?</tspan></text>
+<text x="1084" y="373" xml:space="preserve"><tspan fill="#7AA2F7"> ❯ 1. Yes</tspan></text>
+<text x="1084" y="391" xml:space="preserve"><tspan fill="#CCCCCC">   2. Yes, and don't ask again for pnpm add commands</tspan></text>
+<text x="1084" y="409" xml:space="preserve"><tspan fill="#CCCCCC">   3. No, and tell Claude what to do differently (esc)</tspan></text>
+</g>
+<rect x="1068.5" y="0.5" width="531" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-0-427"><rect x="0" y="427" width="532" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-0-427)">
+<rect x="0" y="427" width="532" height="425" fill="#1F2D3D"/>
+<path d="M8 467 L8 441 Q8 435 14 435 L225.44 435 Q231.44 435 231.44 441 L231.44 467 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="20" y="445" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M23 448.5 L27 451.5 L23 454.5 M28 455 L32 455" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="44" y="456" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ API reference docs</text>
+<path d="M211.44 448 L219.44 456 M219.44 448 L211.44 456" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M246.44 452 L256.44 452 M251.44 447 L251.44 457" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M277.44 450 L281.44 454 L285.44 450" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="409" x2="419" y1="447" y2="447" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="455" y="442" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M501 442 L511 452 M511 442 L501 452" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="23" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="30" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="37" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="44" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="51" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="58" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="65" y="481" width="7" height="7" fill="#D77757"/>
+<rect x="23" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="37" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="44" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="51" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="65" y="488" width="7" height="7" fill="#D77757"/>
+<rect x="16" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="23" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="30" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="37" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="44" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="51" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="58" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="65" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="72" y="495" width="7" height="7" fill="#D77757"/>
+<rect x="23" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="30" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="37" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="44" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="51" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="58" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="65" y="502" width="7" height="7" fill="#D77757"/>
+<rect x="30" y="509" width="3.5" height="7" fill="#D77757"/>
+<rect x="44" y="509" width="3.5" height="7" fill="#D77757"/>
+<rect x="58" y="509" width="3.5" height="7" fill="#D77757"/>
+<rect x="72" y="509" width="3.5" height="7" fill="#D77757"/>
+<text x="97" y="490" fill="#F2F2F2" font-weight="700">Claude Code <tspan fill="#8B8B8B" font-weight="400">v2.1.321</tspan></text>
+<text x="97" y="508" fill="#8B8B8B">Opus 5.5 · Claude Pro</text>
+<text x="97" y="526" fill="#8B8B8B">~\Documents\GitHub\docs</text>
+<rect x="8" y="546" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="16" y="559" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Write the API reference pages from openapi.yaml.</tspan></text>
+
+<text x="16" y="595" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/authentication.md)</tspan></text>
+<text x="16" y="613" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Wrote 84 lines</tspan></text>
+
+<text x="16" y="649" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/projects.md)</tspan></text>
+<text x="16" y="667" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Wrote 132 lines</tspan></text>
+
+<text x="16" y="703" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Write</tspan><tspan fill="#CCCCCC">(docs/api/webhooks.md)</tspan></text>
+
+<text x="16" y="739" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Composing… </tspan><tspan fill="#8B8B8B">(6m 03s · ↓ 21.9k tokens)</tspan></text>
+<line x1="16" x2="516" y1="778" y2="778" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="800" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="16" x2="516" y1="814" y2="814" stroke="#5A5A5A" stroke-width="1"/>
+<text x="16" y="836" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
+</g>
+<rect x="0.5" y="427.5" width="531" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-534-427"><rect x="534" y="427" width="532" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-534-427)">
+<rect x="534" y="427" width="532" height="425" fill="#0C0C0C"/>
+<path d="M542 467 L542 441 Q542 435 548 435 L759.44 435 Q765.44 435 765.44 441 L765.44 467 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="554" y="445" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M557 448.5 L561 451.5 L557 454.5 M562 455 L566 455" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="578" y="456" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">✳ Release 2.4</text>
+<path d="M745.44 448 L753.44 456 M753.44 448 L745.44 456" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M780.44 452 L790.44 452 M785.44 447 L785.44 457" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M811.44 450 L815.44 454 L819.44 450" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="943" x2="953" y1="447" y2="447" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="989" y="442" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1035 442 L1045 452 M1045 442 L1035 452" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="542" y="478" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="550" y="491" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">Get 2.4.0 ready to release.</tspan></text>
+
+<text x="550" y="527" xml:space="preserve"><tspan fill="#8B8B8B">  Ran 3 shell commands</tspan></text>
+
+<text x="550" y="563" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npm test)</tspan></text>
+<text x="550" y="581" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">58 passed, 0 failed</tspan></text>
+
+<text x="550" y="617" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(CHANGELOG.md)</tspan></text>
+<text x="550" y="635" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">Added 14 lines</tspan></text>
+
+<text x="550" y="671" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">All 58 tests pass and the changelog is updated for 2.4.0. Want</tspan></text>
+<text x="550" y="689" xml:space="preserve"><tspan fill="#CCCCCC">  </tspan><tspan fill="#CCCCCC">me to open the pull request?</tspan></text>
+
+<text x="550" y="725" xml:space="preserve"><tspan fill="#8B8B8B">✻ </tspan><tspan fill="#8B8B8B">Worked for 6m 41s</tspan></text>
+<line x1="550" x2="1050" y1="778" y2="778" stroke="#5A5A5A" stroke-width="1"/>
+<text x="550" y="800" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="550" x2="1050" y1="814" y2="814" stroke="#5A5A5A" stroke-width="1"/>
+<text x="550" y="836" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
+</g>
+<rect x="534.5" y="427.5" width="531" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<clipPath id="clip-1068-427"><rect x="1068" y="427" width="532" height="425" rx="6"/></clipPath>
+<g clip-path="url(#clip-1068-427)">
+<rect x="1068" y="427" width="532" height="425" fill="#1F2D3D"/>
+<path d="M1076 467 L1076 441 Q1076 435 1082 435 L1293.44 435 Q1299.44 435 1299.44 441 L1299.44 467 Z" fill="#FFFFFF" fill-opacity="0.07"/>
+<rect x="1088" y="445" width="15" height="13" rx="2" fill="#2F6FB8"/>
+<path d="M1091 448.5 L1095 451.5 L1091 454.5 M1096 455 L1100 455" stroke="#FFFFFF" stroke-width="1.3" fill="none"/>
+<text x="1112" y="456" fill="#F2F2F2" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">◐ Flaky checkout test</text>
+<path d="M1279.44 448 L1287.44 456 M1287.44 448 L1279.44 456" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1314.44 452 L1324.44 452 M1319.44 447 L1319.44 457" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1345.44 450 L1349.44 454 L1353.44 450" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<line x1="1477" x2="1487" y1="447" y2="447" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1523" y="442" width="10" height="10" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<path d="M1569 442 L1579 452 M1579 442 L1569 452" stroke="#8B8B8B" stroke-width="1" fill="none"/>
+<rect x="1076" y="478" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="1084" y="491" xml:space="preserve"><tspan fill="#8B8B8B">&gt; </tspan><tspan fill="#F2F2F2">The checkout test fails about one run in five on CI. Find out</tspan></text>
+<rect x="1076" y="496" width="516" height="18" fill="#FFFFFF" fill-opacity="0.08"/><text x="1084" y="509" xml:space="preserve"><tspan fill="#8B8B8B">  </tspan><tspan fill="#F2F2F2">why.</tspan></text>
+
+<text x="1084" y="545" xml:space="preserve"><tspan fill="#4EBA65">● </tspan><tspan fill="#CCCCCC" font-weight="700">Bash</tspan><tspan fill="#CCCCCC">(npx vitest run checkout --repeat 20)</tspan></text>
+<text x="1084" y="563" xml:space="preserve"><tspan fill="#8B8B8B">  ⎿  </tspan><tspan fill="#8B8B8B">4 of 20 runs failed</tspan></text>
+
+<text x="1084" y="599" xml:space="preserve"><tspan fill="#CCCCCC">● </tspan><tspan fill="#CCCCCC">Every failure times out waiting for the payment mock. The mock</tspan></text>
+<text x="1084" y="617" xml:space="preserve"><tspan fill="#CCCCCC">  </tspan><tspan fill="#CCCCCC">resolves before the listener is attached.</tspan></text>
+
+<text x="1084" y="653" xml:space="preserve"><tspan fill="#8B8B8B">● </tspan><tspan fill="#CCCCCC" font-weight="700">Update</tspan><tspan fill="#CCCCCC">(test/checkout.test.ts)</tspan></text>
+
+<text x="1084" y="689" xml:space="preserve"><tspan fill="#D77757">✻ </tspan><tspan fill="#D77757">Investigating… </tspan><tspan fill="#8B8B8B">(2m 51s · ↓ 9.3k tokens)</tspan></text>
+<line x1="1084" x2="1584" y1="778" y2="778" stroke="#5A5A5A" stroke-width="1"/>
+<text x="1084" y="800" xml:space="preserve"><tspan fill="#CCCCCC">&gt; </tspan></text>
+<line x1="1084" x2="1584" y1="814" y2="814" stroke="#5A5A5A" stroke-width="1"/>
+<text x="1084" y="836" xml:space="preserve"><tspan fill="#8B8B8B">  ? for shortcuts</tspan></text>
+</g>
+<rect x="1068.5" y="427.5" width="531" height="424" rx="6" fill="none" stroke="#3C3C3C"/>
+<rect x="0" y="852" width="1600" height="48" fill="#1C1C1C"/>
+<line x1="0" x2="1600" y1="852.5" y2="852.5" stroke="#2E2E2E"/>
+<rect x="14" y="866" width="9" height="9" fill="#4CC2FF"/>
+<rect x="24" y="866" width="9" height="9" fill="#4CC2FF"/>
+<rect x="14" y="876" width="9" height="9" fill="#4CC2FF"/>
+<rect x="24" y="876" width="9" height="9" fill="#4CC2FF"/>
+<rect x="48" y="860" width="190" height="32" rx="16" fill="#2B2B2B" stroke="#3A3A3A"/>
+<circle cx="68" cy="875" r="5.5" stroke="#CFCFCF" stroke-width="1.4" fill="none"/>
+<line x1="72" y1="879" x2="76" y2="883" stroke="#CFCFCF" stroke-width="1.4"/>
+<text x="86" y="881" fill="#CFCFCF" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">Search</text>
+<rect x="253" y="868" width="8" height="16" rx="1.5" fill="#E6E6E6"/><rect x="263" y="868" width="8" height="16" rx="1.5" fill="none" stroke="#E6E6E6" stroke-width="1.4"/>
+<path d="M295 869 h8 l2 2 h12 v13 h-22 Z" fill="#F4C542"/><rect x="295" y="873" width="22" height="11" fill="#FFD966"/>
+<circle cx="350" cy="876" r="11" fill="#2A8CF0"/><circle cx="350" cy="876" r="5" fill="#BFE3FF"/>
+<circle cx="394" cy="876" r="9" fill="none" stroke="#B9B9B9" stroke-width="3" stroke-dasharray="3 2.2"/><circle cx="394" cy="876" r="3.5" fill="#B9B9B9"/>
+<rect x="426" y="866" width="24" height="20" rx="3" fill="#2B2B2B" stroke="#6A6A6A"/><path d="M431 872 L436 876 L431 880 M438 881 L444 881" stroke="#FFFFFF" stroke-width="1.6" fill="none"/>
+<rect x="430" y="895" width="16" height="3" rx="1.5" fill="#4CC2FF"/>
+<path d="M1386 879 L1390 874 L1394 879" stroke="#E6E6E6" stroke-width="1.3" fill="none"/>
+<path d="M1416 877 q9 -8 18 0 M1419 880 q6 -5 12 0" stroke="#E6E6E6" stroke-width="1.4" fill="none"/><circle cx="1425" cy="883" r="1.6" fill="#E6E6E6"/>
+<path d="M1446 873 h4 l5 -4 v14 l-5 -4 h-4 Z" fill="#E6E6E6"/><path d="M1459 872 q4 4 0 8" stroke="#E6E6E6" stroke-width="1.4" fill="none"/>
+<rect x="1472" y="871" width="20" height="10" rx="2" fill="none" stroke="#E6E6E6" stroke-width="1.2"/><rect x="1474" y="873" width="13" height="6" fill="#E6E6E6"/><rect x="1492" y="874" width="2" height="4" fill="#E6E6E6"/>
+<text x="1584" y="873" text-anchor="end" fill="#E6E6E6" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">2:45 PM</text>
+<text x="1584" y="889" text-anchor="end" fill="#E6E6E6" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">2026-11-09</text>
+</svg>

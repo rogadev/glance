@@ -2,13 +2,17 @@
 
 glance tints your terminal pane while Claude Code is working and puts it back to normal the moment Claude needs you, so you can tell from across the room which sessions are waiting on you.
 
-![Six Claude Code sessions in Windows Terminal: three tinted slate while Claude works, one dimmer while only a dev server runs, and two at the normal background, one at a permission prompt and one finished.](.github/preview.svg)
+![A Windows desktop with four Claude Code sessions in Windows Terminal: three tinted slate while Claude works, and one at the normal background because it finished and is waiting on you.](.github/preview.svg)
+
+![glance's three states side by side: a working window tinted slate, a window standing by in purple while Claude waits on a CI run, and a finished window at the normal background, each above its legend entry.](.github/states.svg)
 
 - **Working** (Claude is busy, or a subagent is, or a `/loop` wakeup or cron job is due within the hour): slate background `#1F2D3D`.
-- **Standing by** (Claude's turn is over, and only a background shell or monitor it started still runs, such as a dev server or a CI watch): a dimmer slate, `#161D25`. Nothing is asked of you, but Claude itself isn't working.
+- **Standing by** (Claude's turn is over, but it's waiting on something that will wake it: a CI watch such as `/land`'s `gh pr checks --watch`, a poll loop, or a monitor it started): a dark purple, `#29203B`. Nothing is asked of you yet; Claude picks the work back up when the wait ends. A dev server, a file watcher, or anything else left running doesn't count: once Claude hands back to you, the pane shows needs you.
 - **Needs you** (turn finished, permission prompt, question, error): your normal terminal background.
 
-The rule is lopsided on purpose. A pane that looks busy when it's really waiting on you is the failure that matters, so every doubtful case falls back to "needs you". That's also why a background shell gets its own dimmer color: glance can't tell a CI watch Claude is waiting on from a dev server nobody is, so slate is kept for Claude itself.
+The rule is lopsided on purpose. A pane that looks busy when it's really waiting on you is the failure that matters, so every doubtful case falls back to "needs you". That's also why standby is narrow: it needs a shell whose command is a wait that ends (`gh pr checks --watch`, `gh run watch`, an `until` or `while` loop with `sleep`, a plain `sleep`), or a monitor Claude started that isn't persistent. Anything glance only learns of from Claude Code's list of running tasks, such as a plugin's own monitor, never holds it.
+
+![A Windows desktop with six Claude Code sessions: four tinted slate while Claude works, and two at the normal background, one at a permission prompt and one finished.](.github/preview-six.svg)
 
 ## Requirements
 
@@ -30,7 +34,7 @@ Answer `y` to add the marketplace, then pick a scope (the user scope tints every
 claude plugin install glance --marketplace rogadev/glance
 ```
 
-In the Claude desktop app, where `/plugin` doesn't run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `rogadev/glance`, then **Add plugin**. There, glance shows its band above the prompt while Claude works (a dimmer one while it stands by), and `/glance-fix` works the same way.
+In the Claude desktop app, where `/plugin` doesn't run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `rogadev/glance`, then **Add plugin**. There, glance shows its band above the prompt while Claude works (a purple one while it stands by), and `/glance-fix` works the same way.
 
 Sessions you start after the install are tinted.
 
@@ -56,10 +60,23 @@ glance paints the terminal window Claude Code runs in, so what matters is the wi
 | macOS Terminal | Unknown: it may not support the reset code, so the tint may not clear |
 | tmux, GNU screen | Unknown: a multiplexer may keep the codes to itself rather than pass them to your window |
 | Git Bash's own window (mintty), ConEmu, the legacy Windows console, JetBrains terminals | Unknown. On Windows, glance paints through the console Claude runs in; whether these windows show it is untested |
-| Claude desktop app | Draws a slate "Claude is working" band above the prompt instead of a tint (no terminal to paint), and a dimmer "A background task is still running" band on standby. Tested with the mod test kit, not yet confirmed in the app |
+| Claude desktop app | Draws a slate "Claude is working" band above the prompt instead of a tint (no terminal to paint), and a purple "A background task is still running" band on standby. Tested with the mod test kit, not yet confirmed in the app |
 | WSL | Runs the macOS and Linux painter inside WSL, so it should behave like the window WSL runs in. Untested |
 
 If yours is unknown or doesn't work, run `/glance-check` and open an issue with its report. See [Report an issue](#report-an-issue).
+
+## Change the colors: `/glance-color`
+
+Type `/glance-color` to see the colors glance uses. To change one, name the state and a hex color:
+
+```text
+/glance-color standby #3A2A55
+/glance-color working #1A3A4A
+```
+
+The pane you typed it in repaints right away, and your other sessions switch at their next event (or run `/glance-fix` in one to repaint it now). `/glance-color reset standby` puts one color back to its default, and `/glance-color reset` puts both back. Needs you is always your terminal's own background, so to change it, change your terminal profile's background.
+
+glance saves your colors in `~/.claude/glance.json`, which you can also edit by hand. A value that isn't a `#RRGGBB` color is ignored (that color keeps its default) and noted in `~/.claude/state/glance/events.log`.
 
 ## Check it works: `/glance-check`
 
@@ -70,9 +87,9 @@ Type `/glance-check` in a session. glance shows the working color for 1.5 second
 If a pane stays tinted while Claude is plainly waiting on you, type `/glance-fix` in that session. It:
 
 1. Asks Claude Code which subagents are still running, and keeps those.
-2. Drops every tracked background shell and scheduled run, so a dev server you don't care about stops holding the standby tint.
+2. Drops every tracked background shell and scheduled run, so a watch you no longer care about stops holding the standby tint.
 3. Repaints the pane as "needs you" and prints what it dropped.
-4. Says what it found before the reset, and whether that was a glance bug: background work Claude Code listed as running when Claude last stopped (the tint was right), background work glance never heard finish and never saw listed (designed: a shell holds the standby tint for up to an hour), subagents still running (the tint was right), subagents Claude Code no longer lists, a working pane with nothing running (glance missed the end of a turn), or a pane glance already had as needs you (the color didn't reach the terminal). It saves this, with the session's recent log lines, to `~/.claude/state/glance/fix-<session id>.json`. When it looks like a bug, it suggests `/glance-report`.
+4. Says what it found before the reset, and whether that was a glance bug: background work Claude Code listed as running when Claude last stopped (the tint was right), background work glance never heard finish and never saw listed (designed: a wait holds the standby tint for up to an hour), subagents still running (the tint was right), subagents Claude Code no longer lists, a working pane with nothing running (glance missed the end of a turn), or a pane glance already had as needs you (the color didn't reach the terminal). It saves this, with the session's recent log lines, to `~/.claude/state/glance/fix-<session id>.json`. When it looks like a bug, it suggests `/glance-report`.
 
 It runs even while a turn is in progress, and it changes nothing in your conversation.
 
@@ -88,6 +105,7 @@ The glance mod (`hooks/register.tsx`) hands each event glance decides on to `gla
 - Each tool call, as `PreToolUse`.
 - Esc, which fires no settings hook. The engine's `turn.complete` with `reason: 'aborted'` becomes a `TurnAborted` event.
 - `/glance-fix`, as `GlanceReset`.
+- `/glance-color`, as `GlanceColor`, with what was typed after it.
 - A `Tick`, from a timer the mod sets when `glance.mjs` asks to be checked on later. Background work expires, and a scheduled run comes due, with no event of its own.
 
 Each run of `glance.mjs`:
@@ -107,21 +125,22 @@ There's also a long-lived **title watcher** (`paint.exe --watch`), **off** by de
 |---|---|
 | `SessionStart` | Needs you; forgets subagents (kept on `compact`, which also ends a manual `/compact` like `PostCompact`) |
 | `PreCompact` (main thread) | Working (`compact-manual` for `/compact`, `compact` for an automatic one) |
-| `PostCompact` | After `/compact`: needs you (`compact-done`), unless background work is still live (working for a subagent or a scheduled run, standby for a shell). After an automatic compact: nothing, since the turn goes on and ends with its own `Stop` |
+| `PostCompact` | After `/compact`: needs you (`compact-done`), unless background work is still live (working for a subagent or a scheduled run, standby for a shell or monitor Claude is waiting on). After an automatic compact: nothing, since the turn goes on and ends with its own `Stop` |
 | `UserPromptSubmit` | Working; clears background work named in any `<task-notification>` in the prompt; a prompt that matches a scheduled run's prompt means it fired (a recurring cron moves to its next run, anything else ends) |
 | `PreToolUse` (main thread) | Working, except `AskUserQuestion` and `ExitPlanMode`, which mean needs you |
 | `PostToolUse`, `PostToolUseFailure`, `ElicitationResult` | Working (main thread, or a subagent clearing its own permission prompt); a `tool_response.backgroundTaskId` adds a background shell, and a successful `TaskStop` (or the older `KillShell`) removes the task it stopped; `ScheduleWakeup` and `CronCreate` add a scheduled run, and `ScheduleWakeup` with `stop` or `CronDelete` removes it |
 | `PermissionRequest`, `Elicitation` | Needs you |
-| `Notification` | Needs you for `permission_prompt`, `idle_prompt`, `elicitation_*dialog`, `agent_needs_input`; `idle_prompt` with live background work stays working (a subagent, a scheduled run) or standby (a shell) |
+| `Notification` | Needs you for `permission_prompt`, `idle_prompt`, `elicitation_*dialog`, `agent_needs_input`; `idle_prompt` with live background work stays working (a subagent, a scheduled run) or standby (a shell or monitor Claude is waiting on) |
 | `SubagentStart` / `SubagentStop` | Add / remove the agent; no color change. `SubagentStop` also brings the tracked background work in line with its `background_tasks` list, as `Stop` does |
-| `Stop` (main thread) | First brings the tracked background work in line with `background_tasks`, the list Claude Code sends of everything still in flight: what it no longer names is dropped, what glance missed is added. Then working (`background-running`) while a subagent, a workflow, or a scheduled run due within the hour is live; standby (`shell-running`) while only a shell, a monitor, or another task is; otherwise needs you |
+| `Stop` (main thread) | First brings the tracked background work in line with `background_tasks`, the list Claude Code sends of everything still in flight: what it no longer names is dropped, what glance missed is added. Then working (`background-running`) while a subagent, a workflow, or a scheduled run due within the hour is live; standby (`shell-running`) while only a shell or monitor Claude is waiting on is (see Standing by, above); otherwise needs you, even with a dev server or a plugin's monitor still running |
 | `UiWorking` (from the mod) | The engine's `isWorking` turned true and stayed true for 1.5 s. Working (`ui-working`), but only when the pane is on needs-you because something finished (a stop, an Esc, a session start); never over a question, a permission prompt, or a dialog. This is what tints bash mode (`! command`), which sends no hook |
-| `UiIdle` (from the mod) | The engine's `isWorking` turned false. After 2.5 s with no hook since: needs you (`ui-idle`), or standby with a shell live, if working and no subagent or scheduled run holds it; otherwise nothing. This catches a `/compact` cancelled with Esc, which sends no `PostCompact` |
-| `TitleIdle` (from the watcher) | Needs you (`title-idle`), or standby with a shell live, if working, no subagent or scheduled run holds the pane, and the title has been idle 2.5 s since the last hook; otherwise nothing. It never turns a pane to working. |
+| `UiIdle` (from the mod) | The engine's `isWorking` turned false. After 2.5 s with no hook since: needs you (`ui-idle`), or standby with a shell or monitor Claude is waiting on live, if working and no subagent or scheduled run holds it; otherwise nothing. This catches a `/compact` cancelled with Esc, which sends no `PostCompact` |
+| `TitleIdle` (from the watcher) | Needs you (`title-idle`), or standby with a shell or monitor Claude is waiting on live, if working, no subagent or scheduled run holds the pane, and the title has been idle 2.5 s since the last hook; otherwise nothing. It never turns a pane to working. |
 | `StopFailure` | Needs you |
 | `TurnAborted` (from the mod) | Needs you (`aborted`), unless background work is still live (working or standby, as on `Stop`) |
 | `Tick` (from the mod) | Sent at the moment `glance.mjs` last named in its state line (`recheck_in_ms`): the next time a background item expires, a scheduled run counts as missed, or one comes within the hour. A pane resting on background work goes to whatever still holds it, or to needs you (`expired`); a finished pane goes working when a scheduled run is now due within the hour. It never changes a turn in progress, a question, or a pane `/glance-fix` reset |
 | `GlanceCheck` (from `/glance-check`) | Shows the working color for 1.5 s, then repaints the current state and reports; changes no state |
+| `GlanceColor` (from `/glance-color`) | Shows the colors, or saves one to `~/.claude/glance.json` and repaints the current state in it; changes no state |
 | `GlanceReset` (from `/glance-fix`) | Needs you (`reset`); keeps only agents the engine still lists as running, drops every shell and scheduled run; saves a diagnosis to `fix-<session id>.json` |
 | `SessionEnd` | Reset to the profile background; delete the state file |
 
@@ -131,7 +150,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 
 - Every mod hook fails open: if `glance.mjs` errors, hangs, or Node is missing, Claude carries on as if glance weren't installed. A missing Node shows one notice per session; everything else, including a run that takes over 5 seconds on a busy machine, goes to the debug log only (`claude --debug`), and the next event repaints.
 - At every `Stop`, glance drops background work Claude Code no longer lists as in flight (`background_tasks`), so an end that sent no signal can't hold a tint past the turn. A shell a subagent started sends none at all.
-- A background shell only ever holds the dimmer standby color, never the working color.
+- A background shell or monitor only ever holds the purple standby color, never the working color, and only when Claude started it to wait on something that ends.
 - Background work with no end signal expires: agents after 4 hours (`CONFIG.agentTtlMs`), shells after 1 hour (`CONFIG.shellTtlMs`). The mod's `Tick` repaints the pane when that time comes, even in a session that is otherwise idle. `/glance-fix` clears it at once.
 - Scheduled runs count only when due within an hour (`SCHEDULE_HORIZON_MS` in `schedule.mjs`), so a job set for tomorrow morning doesn't keep the pane tinted overnight; a `Tick` tints the pane as the run comes within the hour. A run that's later than its allowance (2 minutes, or up to half the period plus 2 minutes for a recurring cron) counts as missed: a recurring cron moves on, anything else ends.
 - (With `CONFIG.titleWatcher` on.) The title watcher clears a working pane that is really idle (Esc, or any other missed end of turn) within about 3 seconds.
@@ -173,13 +192,16 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - (2026-11-09, 2.1.319) `Stop` and `SubagentStop` carry `background_tasks`, the work Claude Code still has in flight, and `session_crons` (debug capture across live sessions). Each task has `id`, `type`, `status`, and `description`: a subagent is `type: 'subagent'` with the id glance tracks as `agent_id` and an `agent_type`; a background shell is `type: 'shell'` with the same id as its `backgroundTaskId` and its `command`. A `Stop` with nothing in flight has an empty list. `SubagentStop` still lists the agent that is stopping as `running`. A live `Stop` also listed a `monitor` glance had never heard start.
 - (2026-11-09, 2.1.319) The end of a background shell that a **subagent** started reaches no hook. A probe subagent ran `sleep 4` in the background: its `PostToolUse` had `backgroundTaskId`, and nothing followed, though the subagent itself was told the shell completed. The shell was gone from `background_tasks` at the subagent's `SubagentStop`. Before glance read that list, three such shells (each done within seconds) held a pane working for 28 minutes until `/glance-fix`. In that day's transcripts, the 11 task notifications for main-thread work that arrived mid-turn each came with a `UserPromptSubmit`; the 3 without one were those shells.
 - (2026-11-09) An idle session sends no events at all: the log shows stretches of 10 and 29 minutes with no line for a pane resting on background work. So an expiry checked only when an event arrives never repaints an idle pane, hence the mod's `Tick`.
+- (2026-11-09, 2.1.321) `/glance-color` with no arguments, run in a fresh `claude -p` session, listed both colors with their defaults and the usage lines: a mod command's `{ text }` is the whole output, with no model turn. Setting and resetting a color is covered by `test/smoke.test.mjs`, not yet tried by hand in a live pane.
+
+- (2026-11-09, 2.1.321) A monitor Claude starts with the Monitor tool reports `tool_response` `{ taskId, timeoutMs, persistent }` on its `PostToolUse`. A session with a monitor it never started (most likely a plugin's) listed it in `background_tasks` at every `Stop`, so before glance stopped adopting those for standby, four finished turns in one session stayed purple until `/glance-fix`; a `pnpm dev:start` dev server did the same after Claude handed back.
 
 ## Open questions
 
 - The update notice is a toast raised about three seconds after a session starts. No one has seen it on screen yet in a marketplace install, in the terminal or the desktop app.
 - Marketplace auto-update is described above from Claude Code's docs, not by experiment: whether it's off by default for glance's marketplace, and when an update lands once it's on.
 - The `Tick` is tested with the mod test kit's clock, not yet seen live: whether a `$.clock.after` timer set from one hook still fires an hour later in an idle session, in the terminal and the desktop app. The log shows it as a `Tick` line.
-- The standby color (`#161D25`, halfway between a near-black terminal and the working color) hasn't been judged on screen: whether it reads as different from both other states across a room, and on a light or a non-black profile background. Change `CONFIG.standbyColor` in `glance.mjs`.
+- The standby color (`#29203B`, a dark purple) was picked on 2026-11-09 from mockups beside the other two states, after the first one (`#161D25`, a dimmer slate) read as too close to a near-black terminal. It hasn't been judged on a real screen across a room yet, or on a light or a non-black profile background. Change `CONFIG.standbyColor` in `glance.mjs`.
 - Whether a main-thread tool event can cover a permission prompt that a background subagent is waiting on. The state is one reason at a time, so a `PreToolUse` or `PostToolUse` from the main thread turns the pane working whatever was asked before. No session logged so far has a `PermissionRequest` to test it against.
 - The cron offset is taken once, when the job is created, so a recurring cron that crosses a daylight-saving change is off by an hour until it's recreated (jobs expire after 7 days anyway).
 - After you approve a permission prompt, the pane stays on needs-you until that tool finishes, so a long approved command looks idle. No event marks the approval: `tool.check` runs before the prompt, and `ui.press` and `ui.select` only cover components a plugin draws.
@@ -233,7 +255,7 @@ Each layer has its own test, from the rules out to the screen:
 - Load your working copy instead of the installed plugin: point `CLAUDE_CODE_PLUGIN_DIRS` at this folder (in the `env` block of `~/.claude/settings.json`), or use `claude --plugin-dir .` for one session. Disable an installed `glance` first, since two plugins named `glance` don't load together. New sessions pick up mod edits; `glance.mjs` edits apply on the next event in every session.
 - `decide()` is pure, and every rule has a test in `test/glance.test.mjs`. The cron math in `schedule.mjs` is covered by `test/schedule.test.mjs`. `test/smoke.test.mjs` runs `glance.mjs` end to end against a throwaway home folder with painting off (`GLANCE_NO_PAINT`).
 - Debug: create an empty file `~/.claude/state/glance/debug` to capture raw hook inputs to `debug.jsonl` beside it. It records prompt text, so delete both when you're done.
-- Change colors in `CONFIG` at the top of `glance.mjs` (`workingColor`, `standbyColor`).
+- The default colors are in `CONFIG` at the top of `glance.mjs` (`workingColor`, `standbyColor`); `~/.claude/glance.json`, which `/glance-color` writes, overrides them on every run. Rerun `node .github/scripts/preview.mjs` after changing a default.
 - Read a pane's title: `paint.exe --title <claude.exe pid>`. Stop running watchers: `Get-Process paint | Stop-Process`.
 
 ## Uninstall
