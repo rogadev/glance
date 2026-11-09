@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import {
   ancestorTtyFrom,
   backgroundChanges,
+  colorRequest,
   decide,
   detectTerminal,
   diagnoseReset,
   emptyState,
   endedTaskIds,
+  normalizeColor,
   osc,
+  parseColors,
   recheckAt,
   stateLine,
   CONFIG,
@@ -805,4 +808,34 @@ test('/glance-fix on a standby pane names the shell Claude Code listed as runnin
   assert.match(d.cause, /shell dev \(started 5 min ago, listed as running 5 min ago\)/);
   // The reset still drops it: the pane is yours to clear.
   assert.deepEqual(ids(run([main('GlanceReset', { live_agents: [] })], s)), []);
+});
+
+test('normalizeColor takes three or six hex digits, with or without #, and nothing else', () => {
+  assert.equal(normalizeColor('#3a2a55'), '#3A2A55');
+  assert.equal(normalizeColor('3A2A55'), '#3A2A55');
+  assert.equal(normalizeColor(' #abc '), '#AABBCC');
+  for (const bad of ['purple', '#12345', '#1234567', '#GGGGGG', '', null, 42]) assert.equal(normalizeColor(bad), null, String(bad));
+});
+
+test('parseColors keeps the good colors and names the bad ones', () => {
+  assert.deepEqual(parseColors('{"workingColor":"#112233","standbyColor":"nope"}'), {
+    colors: { workingColor: '#112233' },
+    problems: ['standbyColor "nope" is not a #RRGGBB color'],
+  });
+  assert.deepEqual(parseColors('{"standbyColor":"#abc","other":1}'), { colors: { standbyColor: '#AABBCC' }, problems: [] });
+  assert.deepEqual(parseColors('{oops'), { colors: {}, problems: ['not valid JSON'] });
+  assert.deepEqual(parseColors('[1]'), { colors: {}, problems: ['not a JSON object'] });
+});
+
+test('colorRequest reads show, set, and reset, and explains anything else', () => {
+  assert.deepEqual(colorRequest(''), { action: 'show' });
+  assert.deepEqual(colorRequest('  Standby  #3a2a55 '), { action: 'set', key: 'standbyColor', color: '#3A2A55' });
+  assert.deepEqual(colorRequest('working 223344'), { action: 'set', key: 'workingColor', color: '#223344' });
+  assert.deepEqual(colorRequest('reset'), { action: 'reset', keys: ['workingColor', 'standbyColor'] });
+  assert.deepEqual(colorRequest('reset standby'), { action: 'reset', keys: ['standbyColor'] });
+  assert.match(colorRequest('reset everything').error, /name working or standby/);
+  assert.match(colorRequest('attention #000000').error, /terminal's own background/);
+  assert.match(colorRequest('busy #000000').error, /no "busy" color/);
+  assert.match(colorRequest('standby').error, /give one color/);
+  assert.match(colorRequest('standby purple').error, /isn't a hex color/);
 });

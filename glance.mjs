@@ -37,6 +37,9 @@ export const CONFIG = {
   // How long /glance-check shows the working color before putting the pane back.
   checkFlashMs: 1500,
   stateDir: path.join(os.homedir(), '.claude', 'state', 'glance'),
+  // The colors /glance-color saves, read on every run. Not in stateDir, where
+  // .json files a week old are pruned.
+  colorsFile: path.join(os.homedir(), '.claude', 'glance.json'),
   // events.log rotates at this size, keeping this many older files
   // (events.log.1 is the newest of them).
   logMaxBytes: 1024 * 1024,
@@ -44,6 +47,76 @@ export const CONFIG = {
   // The soonest glance asks the mod to check back on background work (Tick).
   recheckMinMs: 30 * 1000,
 };
+
+// The states /glance-color can change, and their keys in CONFIG and the colors
+// file. Needs you is always the terminal's own background.
+export const COLOR_KEYS = { working: 'workingColor', standby: 'standbyColor' };
+export const DEFAULT_COLORS = Object.freeze({ workingColor: CONFIG.workingColor, standbyColor: CONFIG.standbyColor });
+
+/**
+ * Normalizes a hex color: `#abc`, `abc`, and `#aabbcc` all become `#AABBCC`.
+ *
+ * @param {unknown} value
+ * @returns {string | null} The color, or null when it isn't one.
+ */
+export function normalizeColor(value) {
+  if (typeof value !== 'string') return null;
+  let hex = value.trim().replace(/^#/, '');
+  if (/^[0-9a-f]{3}$/i.test(hex)) hex = [...hex].map((c) => c + c).join('');
+  return /^[0-9a-f]{6}$/i.test(hex) ? '#' + hex.toUpperCase() : null;
+}
+
+/**
+ * Reads the colors file's text.
+ *
+ * @param {string} text
+ * @returns {{colors: Record<string, string>, problems: string[]}} The valid
+ *   colors, and what was wrong with the rest, for the log.
+ */
+export function parseColors(text) {
+  const colors = {};
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { colors, problems: ['not valid JSON'] };
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { colors, problems: ['not a JSON object'] };
+  const problems = [];
+  for (const key of Object.values(COLOR_KEYS)) {
+    if (!(key in raw)) continue;
+    const color = normalizeColor(raw[key]);
+    if (color) colors[key] = color;
+    else problems.push(`${key} ${JSON.stringify(raw[key])} is not a #RRGGBB color`);
+  }
+  return { colors, problems };
+}
+
+/**
+ * Parses what was typed after /glance-color.
+ *
+ * @param {string} args For example `standby #3A2A55`, `reset standby`, or ''.
+ * @returns {{action: 'show'} | {action: 'set', key: string, color: string} |
+ *   {action: 'reset', keys: string[]} | {error: string}}
+ */
+export function colorRequest(args) {
+  const words = String(args || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return { action: 'show' };
+  if (words[0] === 'reset') {
+    if (words.length === 1) return { action: 'reset', keys: Object.values(COLOR_KEYS) };
+    if (words.length === 2 && COLOR_KEYS[words[1]]) return { action: 'reset', keys: [COLOR_KEYS[words[1]]] };
+    return { error: `can't reset "${words.slice(1).join(' ')}": name working or standby, or nothing for both` };
+  }
+  if (['attention', 'needs', 'needs-you'].includes(words[0])) {
+    return { error: "needs you is always your terminal's own background, so glance leaves it alone. Change the background in your terminal's profile instead" };
+  }
+  const key = COLOR_KEYS[words[0]];
+  if (!key) return { error: `there's no "${words[0]}" color: glance has working and standby` };
+  if (words.length !== 2) return { error: `give one color after ${words[0]}, such as /glance-color ${words[0]} #3A2A55` };
+  const color = normalizeColor(words[1]);
+  if (!color) return { error: `"${words[1]}" isn't a hex color such as #3A2A55` };
+  return { action: 'set', key, color };
+}
 
 export const WORKING = 'working';
 export const STANDBY = 'standby';
@@ -528,6 +601,78 @@ export function detectTerminal(env, platform = process.platform) {
 }
 
 /**
+ * Reads the colors file into CONFIG. A missing file means the defaults; a bad
+ * one, or a bad value in it, is logged and that color keeps its default.
+ *
+ * @returns {Record<string, string>} The colors the file sets.
+ */
+function loadColors() {
+  let text;
+  try {
+    text = fs.readFileSync(CONFIG.colorsFile, 'utf8');
+  } catch (err) {
+    if (err.code !== 'ENOENT') log(`${new Date().toISOString()} colors-unreadable ${CONFIG.colorsFile} ${err.code || err.message}`);
+    return {};
+  }
+  const { colors, problems } = parseColors(text);
+  Object.assign(CONFIG, colors);
+  if (problems.length) log(`${new Date().toISOString()} colors-ignored ${CONFIG.colorsFile}: ${problems.join('; ')}`);
+  return colors;
+}
+
+/** Saves the colors file, or removes it when every color is back to its default. */
+function saveColors(colors) {
+  if (!Object.keys(colors).length) {
+    fs.rmSync(CONFIG.colorsFile, { force: true });
+    return;
+  }
+  fs.mkdirSync(path.dirname(CONFIG.colorsFile), { recursive: true });
+  // Written whole, then renamed, so a hook that reads it meanwhile never sees half a file.
+  const tmp = `${CONFIG.colorsFile}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(colors, null, 2) + '\n');
+  fs.renameSync(tmp, CONFIG.colorsFile);
+}
+
+/**
+ * /glance-color: shows the colors, or changes one and repaints this pane in
+ * it. Other sessions read the file at their next event. Changes no state.
+ */
+function color(input, stateFile, saved) {
+  const req = colorRequest(input.args);
+  const report = { file: CONFIG.colorsFile, defaults: DEFAULT_COLORS };
+  let custom = { ...saved };
+  if (req.error) report.error = req.error;
+  else if (req.action !== 'show') {
+    const next = { ...saved };
+    if (req.action === 'set') next[req.key] = req.color;
+    else for (const key of req.keys) delete next[key];
+    try {
+      saveColors(next);
+      custom = next;
+      Object.assign(CONFIG, DEFAULT_COLORS, next);
+      report.changed = req;
+    } catch (err) {
+      report.error = `couldn't save ${CONFIG.colorsFile} (${err.code || err.message})`;
+    }
+  }
+  report.colors = { workingColor: CONFIG.workingColor, standbyColor: CONFIG.standbyColor };
+  report.custom = Object.keys(custom);
+  let state = emptyState();
+  withLock(stateFile + '.lock', () => {
+    state = readState(stateFile);
+    if (report.changed) report.paint = paint(osc(state.state));
+  });
+  const what = report.error ? 'error' : report.changed ? report.changed.action : 'show';
+  log(
+    `${new Date().toISOString()} ${String(input.session_id || '').slice(0, 8)} main GlanceColor ${what} ` +
+      `working:${CONFIG.workingColor} standby:${CONFIG.standbyColor}${report.paint ? ' ' + report.paint : ''}`,
+  );
+  // The state line first, as apply() prints it, so the mod's band takes the new color.
+  if (input.glance_via === 'mod') process.stdout.write(stateLine(state, Date.now()) + '\n');
+  process.stdout.write(JSON.stringify(report) + '\n');
+}
+
+/**
  * /glance-check: shows the working color for a moment, puts the pane back as
  * glance has it, and prints what it found for the person to compare with what
  * they saw. Changes no state.
@@ -832,9 +977,11 @@ function main() {
   if (process.env.GLANCE_DEBUG || fs.existsSync(path.join(CONFIG.stateDir, 'debug'))) {
     fs.appendFileSync(path.join(CONFIG.stateDir, 'debug.jsonl'), raw.trim() + '\n');
   }
+  const saved = loadColors();
   const stateFile = path.join(CONFIG.stateDir, safeId(input.session_id) + '.json');
-  // /glance-check changes no state; it takes the lock only for its restore.
+  // /glance-check and /glance-color change no state; they take the lock only to repaint.
   if (input.hook_event_name === 'GlanceCheck') return check(input, stateFile);
+  if (input.hook_event_name === 'GlanceColor') return color(input, stateFile, saved);
   // UiIdle arrives the moment the engine stops working. Wait out the confirm
   // window first, so decide() sees any hook that lands meanwhile (a new prompt,
   // the next tool) and leaves the tint alone.

@@ -65,6 +65,19 @@ glance paints the terminal window Claude Code runs in, so what matters is the wi
 
 If yours is unknown or doesn't work, run `/glance-check` and open an issue with its report. See [Report an issue](#report-an-issue).
 
+## Change the colors: `/glance-color`
+
+Type `/glance-color` to see the colors glance uses. To change one, name the state and a hex color:
+
+```text
+/glance-color standby #3A2A55
+/glance-color working #1A3A4A
+```
+
+The pane you typed it in repaints right away, and your other sessions switch at their next event (or run `/glance-fix` in one to repaint it now). `/glance-color reset standby` puts one color back to its default, and `/glance-color reset` puts both back. Needs you is always your terminal's own background, so to change it, change your terminal profile's background.
+
+glance saves your colors in `~/.claude/glance.json`, which you can also edit by hand. A value that isn't a `#RRGGBB` color is ignored (that color keeps its default) and noted in `~/.claude/state/glance/events.log`.
+
 ## Check it works: `/glance-check`
 
 Type `/glance-check` in a session. glance shows the working color for 1.5 seconds, then puts the pane back, and prints a report: the terminal it detected and what's known about it, whether painting succeeded, the current state, and your glance, Node, and system versions. If the painting succeeded but you didn't see the color change, your terminal ignores the codes; the report is what an issue needs. It changes no state.
@@ -92,6 +105,7 @@ The glance mod (`hooks/register.tsx`) hands each event glance decides on to `gla
 - Each tool call, as `PreToolUse`.
 - Esc, which fires no settings hook. The engine's `turn.complete` with `reason: 'aborted'` becomes a `TurnAborted` event.
 - `/glance-fix`, as `GlanceReset`.
+- `/glance-color`, as `GlanceColor`, with what was typed after it.
 - A `Tick`, from a timer the mod sets when `glance.mjs` asks to be checked on later. Background work expires, and a scheduled run comes due, with no event of its own.
 
 Each run of `glance.mjs`:
@@ -126,6 +140,7 @@ There's also a long-lived **title watcher** (`paint.exe --watch`), **off** by de
 | `TurnAborted` (from the mod) | Needs you (`aborted`), unless background work is still live (working or standby, as on `Stop`) |
 | `Tick` (from the mod) | Sent at the moment `glance.mjs` last named in its state line (`recheck_in_ms`): the next time a background item expires, a scheduled run counts as missed, or one comes within the hour. A pane resting on background work goes to whatever still holds it, or to needs you (`expired`); a finished pane goes working when a scheduled run is now due within the hour. It never changes a turn in progress, a question, or a pane `/glance-fix` reset |
 | `GlanceCheck` (from `/glance-check`) | Shows the working color for 1.5 s, then repaints the current state and reports; changes no state |
+| `GlanceColor` (from `/glance-color`) | Shows the colors, or saves one to `~/.claude/glance.json` and repaints the current state in it; changes no state |
 | `GlanceReset` (from `/glance-fix`) | Needs you (`reset`); keeps only agents the engine still lists as running, drops every shell and scheduled run; saves a diagnosis to `fix-<session id>.json` |
 | `SessionEnd` | Reset to the profile background; delete the state file |
 
@@ -177,6 +192,7 @@ Events from inside a subagent never cover up a question the main thread is waiti
 - (2026-11-09, 2.1.319) `Stop` and `SubagentStop` carry `background_tasks`, the work Claude Code still has in flight, and `session_crons` (debug capture across live sessions). Each task has `id`, `type`, `status`, and `description`: a subagent is `type: 'subagent'` with the id glance tracks as `agent_id` and an `agent_type`; a background shell is `type: 'shell'` with the same id as its `backgroundTaskId` and its `command`. A `Stop` with nothing in flight has an empty list. `SubagentStop` still lists the agent that is stopping as `running`. A live `Stop` also listed a `monitor` glance had never heard start.
 - (2026-11-09, 2.1.319) The end of a background shell that a **subagent** started reaches no hook. A probe subagent ran `sleep 4` in the background: its `PostToolUse` had `backgroundTaskId`, and nothing followed, though the subagent itself was told the shell completed. The shell was gone from `background_tasks` at the subagent's `SubagentStop`. Before glance read that list, three such shells (each done within seconds) held a pane working for 28 minutes until `/glance-fix`. In that day's transcripts, the 11 task notifications for main-thread work that arrived mid-turn each came with a `UserPromptSubmit`; the 3 without one were those shells.
 - (2026-11-09) An idle session sends no events at all: the log shows stretches of 10 and 29 minutes with no line for a pane resting on background work. So an expiry checked only when an event arrives never repaints an idle pane, hence the mod's `Tick`.
+- (2026-11-09, 2.1.321) `/glance-color` with no arguments, run in a fresh `claude -p` session, listed both colors with their defaults and the usage lines: a mod command's `{ text }` is the whole output, with no model turn. Setting and resetting a color is covered by `test/smoke.test.mjs`, not yet tried by hand in a live pane.
 
 ## Open questions
 
@@ -237,7 +253,7 @@ Each layer has its own test, from the rules out to the screen:
 - Load your working copy instead of the installed plugin: point `CLAUDE_CODE_PLUGIN_DIRS` at this folder (in the `env` block of `~/.claude/settings.json`), or use `claude --plugin-dir .` for one session. Disable an installed `glance` first, since two plugins named `glance` don't load together. New sessions pick up mod edits; `glance.mjs` edits apply on the next event in every session.
 - `decide()` is pure, and every rule has a test in `test/glance.test.mjs`. The cron math in `schedule.mjs` is covered by `test/schedule.test.mjs`. `test/smoke.test.mjs` runs `glance.mjs` end to end against a throwaway home folder with painting off (`GLANCE_NO_PAINT`).
 - Debug: create an empty file `~/.claude/state/glance/debug` to capture raw hook inputs to `debug.jsonl` beside it. It records prompt text, so delete both when you're done.
-- Change colors in `CONFIG` at the top of `glance.mjs` (`workingColor`, `standbyColor`).
+- The default colors are in `CONFIG` at the top of `glance.mjs` (`workingColor`, `standbyColor`); `~/.claude/glance.json`, which `/glance-color` writes, overrides them on every run. Rerun `node .github/scripts/preview.mjs` after changing a default.
 - Read a pane's title: `paint.exe --title <claude.exe pid>`. Stop running watchers: `Get-Process paint | Stop-Process`.
 
 ## Uninstall

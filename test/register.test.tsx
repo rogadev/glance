@@ -5,6 +5,7 @@ import {
   checkDue,
   describe,
   describeCheck,
+  describeColor,
   isNewer,
   marketplaceOf,
   parsePane,
@@ -915,4 +916,45 @@ test('a command that fails to register never holds up or fails session start', a
   const r = await $.session.start(START)
   expect(r.cwd).toBe(START.cwd)
   expect(starts.length).toBe(1)
+})
+
+const colorReport = (extra: object) =>
+  JSON.stringify({
+    file: '/home/u/.claude/glance.json',
+    defaults: { workingColor: '#1F2D3D', standbyColor: '#29203B' },
+    colors: { workingColor: '#1F2D3D', standbyColor: '#29203B' },
+    custom: [],
+    ...extra,
+  })
+
+test('/glance-color sends GlanceColor with what was typed and shows the result', async ($, on) => {
+  const runs: any[] = []
+  const out = colorReport({
+    colors: { workingColor: '#1F2D3D', standbyColor: '#3A2A55' },
+    custom: ['standbyColor'],
+    changed: { action: 'set', key: 'standbyColor', color: '#3A2A55' },
+    paint: 'ok',
+  })
+  engine(on, runs, JSON.stringify({ state: 'standby', color: '#3A2A55' }) + '\n' + out + '\n')
+  on('command.run', () => ({ text: 'engine ran it' }))
+  const r = await $.command.run({ command: 'glance-color', args: 'standby #3a2a55' })
+  expect(stdinOf(runs[0])).toEqual({ hook_event_name: 'GlanceColor', session_id: 'sess-1', args: 'standby #3a2a55', glance_via: 'mod' })
+  expect(r.text).toContain('Standing by is now #3A2A55.')
+  expect(r.text).toContain('Standing by: #3A2A55 (default #29203B)')
+  expect(r.text).toContain('Saved in /home/u/.claude/glance.json.')
+})
+
+test('/glance-color with nothing after it lists the colors and how to change them', () => {
+  const text = describeColor(colorReport({}))
+  expect(text).toContain('Working: #1F2D3D (default)')
+  expect(text).toContain("Needs you: your terminal's own background")
+  expect(text).toContain('/glance-color reset standby')
+  expect(text).not.toContain('Saved in')
+})
+
+test('/glance-color explains a refused value, and reports a reset', () => {
+  expect(describeColor(colorReport({ error: '"purple" isn\'t a hex color such as #3A2A55' }))).toContain('glance-color: "purple" isn\'t a hex color')
+  const reset = describeColor(colorReport({ changed: { action: 'reset', keys: ['workingColor', 'standbyColor'] } }))
+  expect(reset).toContain('Working and Standing by are back to the default.')
+  expect(describeColor('not json')).toContain('glance.mjs gave no report')
 })

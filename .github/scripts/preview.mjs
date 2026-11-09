@@ -407,7 +407,7 @@ function states({ file, title, panes }) {
     body.push(`<text x="${x + 46}" y="${ly + 32}" fill="#A8A8A8" font-family="${UI}" font-size="13">${esc(note)}</text>`)
   })
   const ny = pad + ph + 18 + 34 + 34
-  body.push(`<text x="${pad}" y="${ny}" fill="#A8A8A8" font-family="${UI}" font-size="13">You can change the colors: set <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">workingColor</tspan> and <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">standbyColor</tspan> in <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">CONFIG</tspan> at the top of <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">glance.mjs</tspan>. Needs you is always your terminal's own background.</text>`)
+  body.push(`<text x="${pad}" y="${ny}" fill="#A8A8A8" font-family="${UI}" font-size="13">Pick your own colors with <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">/glance-color</tspan>, for example <tspan fill="#EEEEEE" font-family="Cascadia Mono, Consolas, monospace">/glance-color standby #3A2A55</tspan>. Needs you is always your terminal's own background.</text>`)
   write(file, title, W, ny + pad, body)
 }
 
