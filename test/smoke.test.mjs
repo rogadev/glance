@@ -65,7 +65,7 @@ test('GlanceReset prints the summary /glance-fix shows', (t) => {
   hook(dir, { hook_event_name: 'Stop', session_id: sid });
   const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: ['a1', 'a2'] });
   const summary = JSON.parse(r.stdout.trim());
-  assert.equal(summary.was, 'working [background-running]');
+  assert.equal(summary.was, 'standby [shell-running]');
   assert.deepEqual(summary.dropped, ['shell devserver']);
   assert.deepEqual(summary.kept, []);
   assert.equal(summary.diagnosis.verdict, 'stale-background');
@@ -74,6 +74,90 @@ test('GlanceReset prints the summary /glance-fix shows', (t) => {
   const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
   assert.deepEqual(snap.before.background, [{ id: 'devserver', kind: 'shell', started_min_ago: 0 }]);
   assert.equal(snap.live_agents, 2);
+});
+
+test('Stop reconciles with the task list Claude Code sends, and the state line asks to be checked on', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-10';
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
+  for (const id of ['devserver', 'finished']) {
+    hook(dir, { hook_event_name: 'PostToolUse', session_id: sid, tool_name: 'Bash', tool_response: { backgroundTaskId: id } });
+  }
+  const r = hook(dir, {
+    hook_event_name: 'Stop',
+    session_id: sid,
+    background_tasks: [{ id: 'devserver', type: 'shell', status: 'running', description: 'dev', command: 'pnpm dev' }],
+    session_crons: [],
+    glance_via: 'mod',
+  });
+  const line = JSON.parse(r.stdout.trim());
+  assert.equal(line.state, 'standby');
+  assert.equal(line.color, '#161D25');
+  assert.ok(line.recheck_in_ms > 59 * 60 * 1000 && line.recheck_in_ms <= 60 * 60 * 1000, `recheck_in_ms ${line.recheck_in_ms}`);
+  assert.match(lastLog(state), /Stop \(via:mod\) -> standby \[shell-running\] bg=1 \(-shell finished\) /);
+  // The snapshot says Claude Code listed the shell, which the diagnosis reads.
+  const fix = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: [] });
+  const summary = JSON.parse(fix.stdout.trim());
+  assert.equal(summary.diagnosis.verdict, 'background-running');
+  const snap = JSON.parse(fs.readFileSync(summary.snapshot, 'utf8'));
+  assert.deepEqual(snap.before.background, [{ id: 'devserver', kind: 'shell', started_min_ago: 0, listed_running_min_ago: 0 }]);
+});
+
+test('a Tick clears a standby pane whose shell expired, with no other event', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-11';
+  fs.mkdirSync(state, { recursive: true });
+  const file = path.join(state, `${sid}.json`);
+  const started = Date.now() - 61 * 60 * 1000;
+  fs.writeFileSync(file, JSON.stringify({ state: 'standby', reason: 'shell-running', background: { dev: { kind: 'shell', at: started } }, updatedAt: started }));
+  const r = hook(dir, { hook_event_name: 'Tick', session_id: sid, glance_via: 'mod' });
+  assert.deepEqual(JSON.parse(r.stdout.trim()), { state: 'attention', color: '#1F2D3D' });
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).reason, 'expired');
+  assert.match(lastLog(state), /Tick \(via:mod\) -> attention \[expired\] bg=0 \(-shell dev\) /);
+});
+
+test('the log keeps three older files, and a snapshot reads across the newest rotation', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-12';
+  const logFile = path.join(state, 'events.log');
+  hook(dir, { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' });
+  fs.writeFileSync(`${logFile}.1`, 'older\n');
+  fs.writeFileSync(`${logFile}.2`, 'oldest\n');
+  fs.appendFileSync(logFile, 'x'.repeat(1024 * 1024) + '\n');
+  hook(dir, { hook_event_name: 'PreToolUse', session_id: sid, tool_name: 'Bash' });
+  assert.equal(fs.readFileSync(`${logFile}.3`, 'utf8'), 'oldest\n');
+  assert.equal(fs.readFileSync(`${logFile}.2`, 'utf8'), 'older\n');
+  assert.match(fs.readFileSync(`${logFile}.1`, 'utf8'), / smoke-12 main UserPromptSubmit /);
+  assert.equal(fs.readFileSync(logFile, 'utf8').trim().split('\n').length, 1);
+  // The prompt's line is in events.log.1 now; the snapshot still has it.
+  const r = hook(dir, { hook_event_name: 'GlanceReset', session_id: sid, live_agents: [] });
+  const snap = JSON.parse(fs.readFileSync(JSON.parse(r.stdout.trim()).snapshot, 'utf8'));
+  assert.deepEqual(snap.log.map((l) => l.split(' ')[3]), ['UserPromptSubmit', 'PreToolUse']);
+});
+
+test('a hook that gives up waiting for the lock leaves the lock to its holder', (t) => {
+  const { dir, state } = home();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sid = 'smoke-13';
+  fs.mkdirSync(state, { recursive: true });
+  const lock = path.join(state, `${sid}.json.lock`);
+  fs.mkdirSync(lock);
+  // Keep the lock fresh, as a live holder's is, so the waiter can't call it dead.
+  const keep = setInterval(() => fs.utimesSync(lock, new Date(), new Date()), 200);
+  t.after(() => clearInterval(keep));
+  const r = spawnSync(process.execPath, [GLANCE], {
+    input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: 'hi' }),
+    encoding: 'utf8',
+    env: { ...process.env, HOME: dir, USERPROFILE: dir, GLANCE_NO_PAINT: '1' },
+    timeout: 10_000,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  // The event still landed, and the holder's lock is still there.
+  assert.equal(JSON.parse(fs.readFileSync(path.join(state, `${sid}.json`), 'utf8')).state, 'working');
+  assert.equal(fs.existsSync(lock), true);
 });
 
 test('a snapshot gives a scheduled wakeup the minutes until it is due', (t) => {

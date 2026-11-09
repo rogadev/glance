@@ -8,6 +8,7 @@ import {
   isNewer,
   marketplaceOf,
   parsePane,
+  recheckOf,
   reportPrompt,
   runUpdateCheck,
   snapshotOf,
@@ -160,6 +161,7 @@ test('/glance-report asks Claude to run the report skill on the last /glance-fix
 
 const WORKING = JSON.stringify({ state: 'working', color: '#1F2D3D' }) + '\n'
 const ATTENTION = JSON.stringify({ state: 'attention', color: '#1F2D3D' }) + '\n'
+const STANDBY = JSON.stringify({ state: 'standby', color: '#161D25' }) + '\n'
 
 // The engine's own drawing of the band, beneath the plugin: one line reading "engine".
 function engineBand(on: Parameters<Parameters<typeof test>[1]>[1]) {
@@ -499,6 +501,86 @@ test('parsePane takes only a well-formed state line', async () => {
   expect(parsePane('{"state":"busy","color":"#1F2D3D"}')).toBeNull()
   expect(parsePane('{"state":"working"}')).toBeNull()
   expect(parsePane('')).toBeNull()
+  expect(parsePane(STANDBY)).toEqual({ state: 'standby', color: '#161D25' })
+})
+
+test('recheckOf reads how long to wait for the Tick, and 0 when the state line asks for none', () => {
+  expect(recheckOf('{"state":"standby","color":"#161D25","recheck_in_ms":60000}\n{"was":"x"}')).toBe(60000)
+  expect(recheckOf(WORKING)).toBe(0)
+  expect(recheckOf('{"recheck_in_ms":"soon"}')).toBe(0)
+  expect(recheckOf('{"recheck_in_ms":-5}')).toBe(0)
+  expect(recheckOf('')).toBe(0)
+})
+
+test('the desktop shows a dimmer band while only a background task runs', async ($, on) => {
+  engineBand(on)
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: STANDBY, stderr: '' } }))
+  on('classic.Stop', () => ({}))
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /background task/ }))?.text).toBe('A background task is still running')
+  expect(await ui.find({ type: 'Text', text: /Claude is working/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a state line that asks to be checked on gets one Tick when its time comes, however many events asked', async ($, on) => {
+  const runs: any[] = []
+  let stdout = JSON.stringify({ state: 'standby', color: '#161D25', recheck_in_ms: 60_000 }) + '\n'
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout, stderr: '' } }))
+  on('classic.Stop', () => ({}))
+  const clock = mock.clock(on)
+  const ticks = () => runs.map(stdinOf).filter((s) => s.hook_event_name === 'Tick')
+
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  await clock.advance(59_000)
+  expect(ticks().length).toBe(0)
+  // The Tick's own answer asks for nothing more, so the timer ends with it.
+  stdout = ATTENTION
+  await clock.advance(3000)
+  expect(ticks()).toEqual([{ hook_event_name: 'Tick', session_id: 'sess-1', glance_via: 'mod' }])
+  await clock.advance(120_000)
+  expect(ticks().length).toBe(1)
+})
+
+test('a state line that no longer asks to be checked on cancels the Tick', async ($, on) => {
+  const runs: any[] = []
+  let stdout = JSON.stringify({ state: 'standby', color: '#161D25', recheck_in_ms: 60_000 }) + '\n'
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout, stderr: '' } }))
+  on('classic.Stop', () => ({}))
+  on('classic.UserPromptSubmit', () => ({}))
+  const clock = mock.clock(on)
+  await $.classic.Stop({ session_id: 'sess-1', stop_hook_active: false })
+  stdout = WORKING
+  await $.classic.UserPromptSubmit({ session_id: 'sess-1', prompt: 'hi' })
+  await clock.advance(120_000)
+  expect(runs.map(stdinOf).filter((s) => s.hook_event_name === 'Tick').length).toBe(0)
+})
+
+test('a turn that is already working sends no UiWorking: it would change nothing', async ($, on) => {
+  const runs: any[] = []
+  engineBand(on)
+  engine(on, runs, WORKING)
+  on('classic.UserPromptSubmit', () => ({}))
+  const clock = mock.clock(on)
+  await $.classic.UserPromptSubmit({ session_id: 'sess-1', prompt: 'hi' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, isWorking: true } })
+  await clock.advance(1700)
+  await ui.unmount()
+  expect(runs.map(stdinOf).filter((s) => s.hook_event_name === 'UiWorking').length).toBe(0)
+})
+
+test('an Esc glance cannot report still ends the turn with its answer', async ($, on) => {
+  const logs: string[] = []
+  on('session.id', () => ({ deny: 'no session' }) as never)
+  on('ui.log', (_, e) => (logs.push(e.text), { value: undefined }) as never)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  const r = await $.turn.complete({ ...turn, answer: 'done', isAborted: true, reason: 'aborted' })
+  expect(r.text).toBe('done')
+  expect(logs.some((l) => l.includes('could not report the Esc'))).toBe(true)
 })
 
 // The update check. ROOT is where a marketplace install of glance lives.
