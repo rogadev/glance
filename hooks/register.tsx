@@ -631,7 +631,7 @@ export const register: Register = (on) => {
   /**
    * The desktop app's stand-in for the terminal tint: a full-width band above
    * the prompt, in the working color while glance says working and in the
-   * dimmer standby color while only a background shell runs, and nothing
+   * purple standby color while only a background shell runs, and nothing
    * otherwise (needs you). The terminal is tinted by glance.mjs, so it passes.
    */
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

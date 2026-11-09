@@ -1,6 +1,6 @@
 # glance
 
-A Claude Code mod that tints the terminal pane (or, in the desktop app, draws a band above the prompt) while Claude works, with a dimmer tint while only a background shell runs, so the user can tell from across the room which sessions need them. Read `README.md` first: it has the event table, what has been verified by experiment, the open questions, and the release workflow.
+A Claude Code mod that tints the terminal pane (or, in the desktop app, draws a band above the prompt) while Claude works, with a purple tint while only a background shell runs, so the user can tell from across the room which sessions need them. Read `README.md` first: it has the event table, what has been verified by experiment, the open questions, and the release workflow.
 
 Repo: `rogadev/glance` (public). Work on `dev`; `main` takes pull requests from `dev` only, merged with a merge commit. There's no release pull request: CI's `version` job commits the next version to `dev` on the `dev` to `main` pull request, and the merge publishes the release. Use conventional commit messages (`feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`): they decide the next version.
 
@@ -8,7 +8,7 @@ On the maintainer's machine this folder is also the live install: `CLAUDE_CODE_P
 
 ## Rules
 
-- The top requirement is reliability: a pane must never show "working" while it's waiting on the user. When a case is uncertain, fall back to the needs-you state. The working color is for Claude itself (its turn, a subagent, a scheduled run due soon); a background shell only ever holds the dimmer standby color, since it may be a dev server nobody is waiting on.
+- The top requirement is reliability: a pane must never show "working" while it's waiting on the user. When a case is uncertain, fall back to the needs-you state. The working color is for Claude itself (its turn, a subagent, a scheduled run due soon); a background shell only ever holds the purple standby color, since it may be a dev server nobody is waiting on.
 - Trust what Claude Code says is running over what glance inferred: `Stop` and `SubagentStop` carry `background_tasks`, and `decide()` brings the tracked background work in line with it. Add a rule that infers an end from some other signal only for what that list can't cover.
 - Keep `decide()` pure and add a test in `test/glance.test.mjs` for every rule change. Before you finish, run `node --test test/glance.test.mjs test/schedule.test.mjs test/smoke.test.mjs test/terminal.test.mjs test/release.test.mjs`, `claude plugin validate .`, `claude plugin test .`, and `npx -p typescript tsc -p .` (the last needs `.claude-plugin/types/`, which the engine writes when it loads the mod).
 - Prove hook behavior by experiment (the event log, or debug capture), not from the docs alone. Record each finding under "Things verified by experiment" in `README.md` with the date and Claude Code version. `claude -p --plugin-dir <copy>` from PowerShell runs a session against a scratch copy; every line the mod sends is marked `via:mod` in the log. For keys and commands (Esc, `/compact`, `! command`), add a scenario to `test/live/run.mjs` and run it: it drives a real interactive session on Windows without taking focus.
@@ -27,7 +27,7 @@ On the maintainer's machine this folder is also the live install: `CLAUDE_CODE_P
 - `types/index.d.ts`: the mod's state shape (`Pane`), registered with the engine through `PluginState`.
 - `paint.cs`: source of `paint.exe`, the console painter and the per-session title watcher (`--watch`). `build.ps1`: rebuilds it with the `csc.exe` that ships with Windows.
 - `.claude-plugin/`: `plugin.json` (CI's `version` job bumps its version) and `marketplace.json` (what `/plugin install glance --marketplace rogadev/glance` reads).
-- `.github/workflows/`: `ci.yml` (tests on three systems, plugin checks, `paint.exe` check, the dev-only-into-main guard, the `version` job, and the `ci ok` check the branch rules require) and `release.yml` (tags and publishes the release when a version reaches `main`). `.github/scripts/release.mjs`: the version and changelog rules both run (tests: `test/release.test.mjs`). `.github/scripts/preview.mjs`: builds `.github/preview.svg`, the README's picture of six panes, with the tints from `CONFIG`; rerun it after changing a color.
+- `.github/workflows/`: `ci.yml` (tests on three systems, plugin checks, `paint.exe` check, the dev-only-into-main guard, the `version` job, and the `ci ok` check the branch rules require) and `release.yml` (tags and publishes the release when a version reaches `main`). `.github/scripts/release.mjs`: the version and changelog rules both run (tests: `test/release.test.mjs`). `.github/scripts/preview.mjs`: builds the README's pictures, `.github/preview.svg` and `.github/preview-six.svg` (Windows desktops with four and six sessions) and `.github/states.svg` (one window per state above its legend entry), with the tints from `CONFIG`; rerun it after changing a color.
 - State and log: `~/.claude/state/glance/` (`<session_id>.json`, `<session_id>.watch` with the watcher pid, `fix-<session_id>.json` from `/glance-fix`, `events.log`).
 
 ## History

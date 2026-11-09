@@ -161,7 +161,7 @@ test('/glance-report asks Claude to run the report skill on the last /glance-fix
 
 const WORKING = JSON.stringify({ state: 'working', color: '#1F2D3D' }) + '\n'
 const ATTENTION = JSON.stringify({ state: 'attention', color: '#1F2D3D' }) + '\n'
-const STANDBY = JSON.stringify({ state: 'standby', color: '#161D25' }) + '\n'
+const STANDBY = JSON.stringify({ state: 'standby', color: '#29203B' }) + '\n'
 
 // The engine's own drawing of the band, beneath the plugin: one line reading "engine".
 function engineBand(on: Parameters<Parameters<typeof test>[1]>[1]) {
@@ -501,18 +501,18 @@ test('parsePane takes only a well-formed state line', async () => {
   expect(parsePane('{"state":"busy","color":"#1F2D3D"}')).toBeNull()
   expect(parsePane('{"state":"working"}')).toBeNull()
   expect(parsePane('')).toBeNull()
-  expect(parsePane(STANDBY)).toEqual({ state: 'standby', color: '#161D25' })
+  expect(parsePane(STANDBY)).toEqual({ state: 'standby', color: '#29203B' })
 })
 
 test('recheckOf reads how long to wait for the Tick, and 0 when the state line asks for none', () => {
-  expect(recheckOf('{"state":"standby","color":"#161D25","recheck_in_ms":60000}\n{"was":"x"}')).toBe(60000)
+  expect(recheckOf('{"state":"standby","color":"#29203B","recheck_in_ms":60000}\n{"was":"x"}')).toBe(60000)
   expect(recheckOf(WORKING)).toBe(0)
   expect(recheckOf('{"recheck_in_ms":"soon"}')).toBe(0)
   expect(recheckOf('{"recheck_in_ms":-5}')).toBe(0)
   expect(recheckOf('')).toBe(0)
 })
 
-test('the desktop shows a dimmer band while only a background task runs', async ($, on) => {
+test('the desktop shows the standby band while only a background task runs', async ($, on) => {
   engineBand(on)
   on('session.id', () => ({ value: 'sess-1' }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: STANDBY, stderr: '' } }))
@@ -526,7 +526,7 @@ test('the desktop shows a dimmer band while only a background task runs', async 
 
 test('a state line that asks to be checked on gets one Tick when its time comes, however many events asked', async ($, on) => {
   const runs: any[] = []
-  let stdout = JSON.stringify({ state: 'standby', color: '#161D25', recheck_in_ms: 60_000 }) + '\n'
+  let stdout = JSON.stringify({ state: 'standby', color: '#29203B', recheck_in_ms: 60_000 }) + '\n'
   on('session.id', () => ({ value: 'sess-1' }))
   on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout, stderr: '' } }))
   on('classic.Stop', () => ({}))
@@ -547,7 +547,7 @@ test('a state line that asks to be checked on gets one Tick when its time comes,
 
 test('a state line that no longer asks to be checked on cancels the Tick', async ($, on) => {
   const runs: any[] = []
-  let stdout = JSON.stringify({ state: 'standby', color: '#161D25', recheck_in_ms: 60_000 }) + '\n'
+  let stdout = JSON.stringify({ state: 'standby', color: '#29203B', recheck_in_ms: 60_000 }) + '\n'
   on('session.id', () => ({ value: 'sess-1' }))
   on('process.run', (_, e) => (runs.push(e), { value: { exitCode: 0, stdout, stderr: '' } }))
   on('classic.Stop', () => ({}))

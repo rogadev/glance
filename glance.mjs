@@ -17,9 +17,10 @@ export const CONFIG = {
   // Background while Claude, a subagent, or a scheduled run due soon is busy.
   workingColor: '#1F2D3D',
   // Background while Claude's turn is over and only a background shell (a dev
-  // server, a CI watch) still runs: halfway between a dark terminal and the
-  // working color, so slate always means Claude itself is busy.
-  standbyColor: '#161D25',
+  // server, a CI watch) still runs: a dark purple, a different hue from the
+  // working slate and the needs-you background, so slate always means Claude
+  // itself is busy.
+  standbyColor: '#29203B',
   // null resets to the Windows Terminal profile background (OSC 111).
   attentionColor: null,
   // Background work with no end signal after this long is treated as finished.
@@ -239,7 +240,7 @@ export function diagnoseReset(prev, input, now) {
     return {
       verdict: 'stale-background',
       suspect: false,
-      cause: `glance was keeping the tint for background work it never heard finish: ${stale.join(', ')}. A shell left running, such as a dev server, holds the dimmer standby tint for up to an hour.`,
+      cause: `glance was keeping the tint for background work it never heard finish: ${stale.join(', ')}. A shell left running, such as a dev server, holds the purple standby tint for up to an hour.`,
     };
   }
   if (listed.length) {

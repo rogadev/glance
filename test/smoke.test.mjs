@@ -93,7 +93,7 @@ test('Stop reconciles with the task list Claude Code sends, and the state line a
   });
   const line = JSON.parse(r.stdout.trim());
   assert.equal(line.state, 'standby');
-  assert.equal(line.color, '#161D25');
+  assert.equal(line.color, '#29203B');
   assert.ok(line.recheck_in_ms > 59 * 60 * 1000 && line.recheck_in_ms <= 60 * 60 * 1000, `recheck_in_ms ${line.recheck_in_ms}`);
   assert.match(lastLog(state), /Stop \(via:mod\) -> standby \[shell-running\] bg=1 \(-shell finished\) /);
   // The snapshot says Claude Code listed the shell, which the diagnosis reads.
