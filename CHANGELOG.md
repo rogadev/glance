@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.1](https://github.com/rogadev/glance/compare/v0.6.0...v0.6.1) (2026-11-19)
+
+### Bug Fixes
+
+* show standby while a bounded for-loop poll runs in the background ([7e1627f](https://github.com/rogadev/glance/commit/7e1627fe1eaaec29f30cb8276ba09114f98a10d5))
+
 ## [0.6.0](https://github.com/rogadev/glance/compare/v0.5.0...v0.6.0) (2026-11-09)
 
 ### Features
