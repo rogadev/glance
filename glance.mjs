@@ -187,6 +187,8 @@ const WAIT_COMMANDS = [
   /\bgh\s+(?:pr\s+checks|run\s+watch)\b[^|;&]*(?:--watch|\bwatch\b)/,
   /\bgh\s+run\s+watch\b/,
   /\b(?:until|while)\b[\s\S]*\bsleep\b/,
+  // A bounded poll, the shape Claude writes most: for i in $(seq 1 120); do ...; sleep 5; done
+  /\bfor\s+(?:\w+\s+in\b|\(\()[\s\S]*\bdo\b[\s\S]*\bsleep\b/,
   /^\s*sleep\s+\d/,
   /\bkubectl\s+rollout\s+status\b/,
 ];

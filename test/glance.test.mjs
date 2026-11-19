@@ -701,12 +701,42 @@ test('a monitor Claude starts holds standby after Stop, unless it is persistent'
 });
 
 test('waitsFor tells a wait that ends from a command that runs until stopped', () => {
-  for (const yes of ['gh pr checks 19 --watch', 'gh run watch 123', 'until grep -q Ready log; do sleep 1; done', 'while true; do gh pr checks 1; sleep 30; done', 'sleep 300']) {
+  for (const yes of [
+    'gh pr checks 19 --watch',
+    'gh run watch 123',
+    'until grep -q Ready log; do sleep 1; done',
+    'while true; do gh pr checks 1; sleep 30; done',
+    'sleep 300',
+    // Bounded for loops, the poll Claude writes most often (seen in techcentral, evo, orc-pack, and summit).
+    'for i in $(seq 1 40); do t=$(gh release view v2.1.0 -q .tagName); [ "$t" = "v2.1.0" ] && break; sleep 15; done',
+    'cd /c/repo && sleep 90; for i in $(seq 1 40); do pending=0; for n in 254 259; do gh pr view $n; done; sleep 30; done',
+    'for ((i = 0; i < 30; i++)); do curl -sf localhost:3000 && break; sleep 2; done',
+  ]) {
     assert.equal(waitsFor(yes), true, yes);
   }
-  for (const no of ['pnpm dev', 'npm run dev', 'tsc --watch', 'vite', 'gh pr checks 19', 'docker compose up', undefined]) {
+  for (const no of [
+    'pnpm dev',
+    'npm run dev',
+    'tsc --watch',
+    'vite',
+    'gh pr checks 19',
+    'docker compose up',
+    'for p in web api; do pnpm --filter "$p" dev & done; wait',
+    'echo "waiting for the server"; pnpm dev',
+    undefined,
+  ]) {
     assert.equal(waitsFor(no), false, String(no));
   }
+});
+
+test('a bounded for-loop poll puts the pane on standby after Stop', () => {
+  // The command from a techcentral session that showed needs you for the
+  // eight minutes its wait ran, before for loops counted as waits.
+  const poll =
+    'for i in $(seq 1 120); do if git diff --cached --quiet; then echo "index clean after ${i}x5s"; git log --oneline -3; exit 0; fi; sleep 5; done; echo "still staged after 10 minutes"; git diff --cached --name-only';
+  const s = run([main('UserPromptSubmit'), bgShell('bzqhtuxrb', poll), main('Stop', { background_tasks: [task('bzqhtuxrb')] })]);
+  assert.equal(s.state, STANDBY);
+  assert.equal(s.reason, 'shell-running');
 });
 
 test('Stop with no task list (an older Claude Code) keeps what glance tracked', () => {
