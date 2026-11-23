@@ -193,15 +193,51 @@ const WAIT_COMMANDS = [
   /\bkubectl\s+rollout\s+status\b/,
 ];
 
+// Commands that start something that runs until stopped: a server or a
+// watcher. These rule out FINITE_JOBS (so `pnpm dev; echo "exit=$?"` stays a
+// server) but never WAIT_COMMANDS. Each is keyed on how a server is started,
+// not on a bare word: a test run can say DEV_SERVER, and a server E2E_TEST.
+const LONG_RUNNING = [
+  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:dev|start|serve|preview)(?!\w)/,
+  /\b(?:next|nuxt|astro|remix|wrangler)\s+dev\b/,
+  /\bvite\b(?!\s+build)/,
+  /\bmake\s+(?:dev|serve|start|run|watch)\b/,
+  /\bwatch\b|--watch\w*|\btsc\b[^|;&]*\s-w\b/,
+  /\btail\b[^|;&]*\s-[a-zA-Z]*[fF]\b/,
+  /\b(?:docker|podman)[\s-]compose\s+up\b(?![^|;&]*\s-d\b)/,
+  /--(?:reload|port|host)\b|\b(?:uvicorn|gunicorn|nodemon|runserver|http\.server|flask\s+run)\b/,
+  /(?<![a-z])(?:serve|server|start|dev|watch)(?![a-z])[\w.-]*\.(?:ps1|sh|py|[cm]?[jt]s)\b/i,
+  /(?<![a-z])(?:app|index|wsgi|asgi)\.(?:[cm]?[jt]s|py)\b/i,
+];
+
+// Jobs that run to completion, so Claude is resumed when they end. Any one
+// is enough, once the command matches nothing in LONG_RUNNING.
+const FINITE_JOBS = [
+  // It reads its own exit status, which only makes sense for a command that ends.
+  /\$\?/,
+  // Piped into `tail -15` (no -f), which prints nothing until its input ends.
+  /\|\s*tail\s+(?:-n\s*)?-?\d+\b/,
+  // A script run by its interpreter.
+  /\b(?:pwsh|powershell)(?:\.exe)?\b[^|;&]*\s-f(?:ile)?\s/i,
+  /\b(?:python3?|py|node|bash|sh|zsh|ruby|perl|tsx|ts-node|Rscript|deno\s+run|bun(?:\s+run)?)(?:\.exe)?\s+(?:-\S+\s+)*["']?[^\s|;&"']+\.(?:py|[cm]?[jt]s|sh|ps1|rb|pl|R)\b/i,
+  /(?:^|[\s;&|(])["']?\.{1,2}\/[^\s|;&"']+\.(?:sh|py|ps1)\b/,
+  // A test, lint, or build run.
+  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|check|typecheck|build|e2e)(?!\w)/,
+  /\bvitest\b[^|;&]*\s(?:--)?run\b/,
+  /\b(?:pytest|tox|nox|mocha|jest|tsc|playwright\s+test|cargo\s+(?:build|test|check|clippy|xtask)|go\s+(?:build|test|vet)|dotnet\s+(?:build|test)|make|mvn|gradlew?)\b/,
+];
+
 /**
- * True when a background shell command waits for something and then ends,
- * rather than running until stopped (a dev server, a file watcher).
+ * True when a background shell command waits for something or runs a job
+ * that ends, rather than running until stopped (a dev server, a file watcher).
  *
  * @param {unknown} command The shell's command line.
  * @returns {boolean}
  */
 export function waitsFor(command) {
-  return typeof command === 'string' && WAIT_COMMANDS.some((re) => re.test(command));
+  if (typeof command !== 'string') return false;
+  if (WAIT_COMMANDS.some((re) => re.test(command))) return true;
+  return FINITE_JOBS.some((re) => re.test(command)) && !LONG_RUNNING.some((re) => re.test(command));
 }
 
 // What glance calls the task types Claude Code lists in background_tasks.
