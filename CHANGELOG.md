@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/rogadev/glance/compare/v0.6.1...v0.6.2) (2026-11-23)
+
+### Bug Fixes
+
+* show standby while a background script or test run that ends is running ([1537d4e](https://github.com/rogadev/glance/commit/1537d4ea583c9fe0736f4ba7b0b51ea4ac2d84ba))
+* count a background run that reads its exit status or pipes into tail as a wait ([902e894](https://github.com/rogadev/glance/commit/902e8941308802e30dd08afc90e40870f7a59270))
+
 ## [0.6.1](https://github.com/rogadev/glance/compare/v0.6.0...v0.6.1) (2026-11-19)
 
 ### Bug Fixes
