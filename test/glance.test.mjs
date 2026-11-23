@@ -711,6 +711,25 @@ test('waitsFor tells a wait that ends from a command that runs until stopped', (
     'for i in $(seq 1 40); do t=$(gh release view v2.1.0 -q .tagName); [ "$t" = "v2.1.0" ] && break; sleep 15; done',
     'cd /c/repo && sleep 90; for i in $(seq 1 40); do pending=0; for n in 254 259; do gh pr view $n; done; sleep 30; done',
     'for ((i = 0; i < 30; i++)); do curl -sf localhost:3000 && break; sleep 2; done',
+    // A wait on a dev server's log keeps its result, though it names one.
+    'until grep -q "Ready in" dev.log; do sleep 0.5; done',
+    // Test, lint, and build runs Claude waited on in the week before #22 ($SP is a scratchpad path).
+    `export PATH="$HOME/.cargo/bin:$PATH"; unset CARGO_TARGET_DIR; cd "$SP/clone" && rustc --version && cargo --version && START=$(date +%s); cargo xtask check > "$SP/check.log" 2>&1; RC=$?; END=$(date +%s); echo "exit=$RC seconds=$((END-START))" | tee -a "$SP/check.log"`,
+    `export PATH="$HOME/.cargo/bin:$PATH" && S="$SP" && start=$(date +%s); cargo build --workspace > "$S/build.log" 2>&1; rc=$?; echo "exit=$rc elapsed=$(( $(date +%s) - start ))s" >> "$S/build.log"; tail -4 "$S/build.log"`,
+    `pnpm test:e2e > "$SP/e2e.log" 2>&1; echo "exit=$?"`,
+    `pnpm test:e2e > "$SP/e2e.log" 2>&1; echo "EXIT $?" >> "$SP/e2e.log"`,
+    `pnpm test:e2e > "$TEMP/e2e.log" 2>&1; echo "exit=$?"; tail -4 "$TEMP/e2e.log"`,
+    `pwsh -NoProfile -Command 'if (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue) { "still held" } else { "port free" }'; pnpm test:e2e > "$TEMP/e2e.log" 2>&1; echo "exit=$?"; tail -15 "$TEMP/e2e.log"`,
+    `pnpm test:unit --run > "$SP/unit.log" 2>&1; echo "exit=$?" >> "$SP/unit.log"`,
+    `pnpm test:unit --run > "$SP/unit.log" 2>&1; echo "unit exit $?"; pnpm test:integration:local > "$SP/int.log" 2>&1; echo "integration exit $?"`,
+    `pnpm ready > "$SP/ready.log" 2>&1; echo "exit $?"`,
+    `git status --porcelain && pnpm ready 2>&1 | grep -E 'Test Files|Tests |error|Error:|warning|Found|ELIFECYCLE|failed' | grep -v '"severity"' | tail -20`,
+    `pnpm lint:fix >/dev/null 2>&1; pnpm lint >/dev/null 2>&1; echo "lint $?"; pnpm check 2>&1 | tail -1`,
+    `PLAYWRIGHT_USE_DEV_SERVER=true node scripts/with-test-db-env.js pnpm exec playwright test --workers=1 --reporter=line > "$SP/e2e-full.log" 2>&1; echo "exit $?"`,
+    `pnpm vitest --project client --run src/routes/app/containers/ > "$SP/snz.log" 2>&1; echo "exit $?"`,
+    `pnpm vitest --project client --run src/routes/app/containers/new/ > "$SP/addv.log" 2>&1; grep -E "✓|×|Tests |Test Files" "$SP/addv.log"`,
+    `pnpm test:integration:local 2>&1 | grep -E "Test Files|Tests |FAIL|×|Error:" | head -40 > "$SP/int.txt"; cat "$SP/int.txt"`,
+    `./target/release/npc-worker.exe ingest 2>&1 | sed 's/\\x1b\\[[0-9;]*m//g' | grep -vE "stored forecast hour" | tail -15`,
   ]) {
     assert.equal(waitsFor(yes), true, yes);
   }
@@ -724,9 +743,30 @@ test('waitsFor tells a wait that ends from a command that runs until stopped', (
     'for p in web api; do pnpm --filter "$p" dev & done; wait',
     'echo "waiting for the server"; pnpm dev',
     undefined,
+    // Servers from the same week. The vite one says E2E_TEST, and the last reads $?.
+    'pnpm dev --port 4329',
+    'pnpm dev:start',
+    `pnpm dev > "$TEMP/dev.log" 2>&1`,
+    'DATABASE_URL=postgresql://placeholder pnpm exec next dev --turbopack --port 3199',
+    `E2E_TEST=true BETTER_AUTH_URL=http://localhost:4173 node scripts/with-test-db-env.js pnpm exec vite dev --port 4173 --strictPort > "$SP/vite.log" 2>&1`,
+    `./target/release/npc-api.exe 2>&1 | sed 's/\\x1b\\[[0-9;]*m//g'`,
+    'pnpm dev; echo "exit=$?"',
+    'tail -f server.log | tail -20',
+    'podman compose up; echo "exit $?"',
   ]) {
     assert.equal(waitsFor(no), false, String(no));
   }
+});
+
+test('a background test run Claude waits on holds standby until its completion arrives', () => {
+  const e2e = 'pnpm test:e2e > e2e.log 2>&1; echo "exit=$?"';
+  const waiting = run([main('UserPromptSubmit'), bgShell('b6lcrd2pc', e2e), main('Stop', { background_tasks: [task('b6lcrd2pc')] })]);
+  assert.equal(waiting.state, STANDBY);
+  assert.equal(waiting.reason, 'shell-running');
+  assert.deepEqual(ids(waiting), ['b6lcrd2pc']);
+  const done = run([main('UserPromptSubmit', { prompt: notice('b6lcrd2pc', 'completed') })], waiting);
+  assert.equal(done.state, WORKING);
+  assert.deepEqual(ids(done), []);
 });
 
 test('waitsFor counts a job that runs to completion, but not a server or watcher', () => {
