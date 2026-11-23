@@ -729,6 +729,57 @@ test('waitsFor tells a wait that ends from a command that runs until stopped', (
   }
 });
 
+test('waitsFor counts a job that runs to completion, but not a server or watcher', () => {
+  for (const yes of [
+    'pwsh -NoProfile -File "C:/Users/me/scratchpad/compare-pillow.ps1"',
+    'powershell.exe -ExecutionPolicy Bypass -File build.ps1',
+    'python analyze_flybys.py --frames 7388 > out.txt 2>&1',
+    'cd /c/repo && python3 -u scripts/migrate.py',
+    'node scripts/backfill.mjs',
+    'bash ./scripts/release.sh',
+    './run-all.sh > /dev/null',
+    'npm test',
+    'pnpm run build',
+    'python -m pytest tests/ -x',
+    'cargo test --release',
+    'go test ./...',
+    'npx vitest run',
+    'node --test test/glance.test.mjs',
+  ]) {
+    assert.equal(waitsFor(yes), true, yes);
+  }
+  for (const no of [
+    'node server.js',
+    'node index.js',
+    'python app.py',
+    'python -m http.server 8000',
+    'uvicorn main:app --reload',
+    'pwsh -File ./start-server.ps1',
+    'bash scripts/dev.sh',
+    'npm start',
+    'pnpm run dev:all',
+    'npm run build:watch',
+    'npm test -- --watch',
+    'jest --watch',
+    'tsc -w',
+    'make serve',
+    'pnpm build && pnpm start',
+    'python seed.py && pnpm dev',
+    'node render.mjs --port 4000',
+  ]) {
+    assert.equal(waitsFor(no), false, no);
+  }
+});
+
+test('a background script that runs to completion puts the pane on standby after Stop', () => {
+  // The command from a session that showed needs you while it ran for minutes,
+  // with Claude saying it would compare the results when the run finished.
+  const job = 'pwsh -NoProfile -File "C:/Users/Roga/AppData/Local/Temp/claude/x/scratchpad/compare-pillow.ps1"';
+  const s = run([main('UserPromptSubmit'), bgShell('blwyr1g1c', job), main('Stop', { background_tasks: [task('blwyr1g1c')] })]);
+  assert.equal(s.state, STANDBY);
+  assert.equal(s.reason, 'shell-running');
+});
+
 test('a bounded for-loop poll puts the pane on standby after Stop', () => {
   // The command from a techcentral session that showed needs you for the
   // eight minutes its wait ran, before for loops counted as waits.

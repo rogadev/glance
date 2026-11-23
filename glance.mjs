@@ -193,15 +193,37 @@ const WAIT_COMMANDS = [
   /\bkubectl\s+rollout\s+status\b/,
 ];
 
+// Jobs that run to completion, so Claude is resumed when they end: a script
+// run by its interpreter, or a test or build command. These count only when
+// the command matches nothing in LONG_RUNNING.
+const FINITE_JOBS = [
+  /\b(?:pwsh|powershell)(?:\.exe)?\b[^|;&]*\s-f(?:ile)?\s/i,
+  /\b(?:python3?|py|node|bash|sh|zsh|ruby|perl|tsx|ts-node|Rscript|deno\s+run|bun(?:\s+run)?)(?:\.exe)?\s+(?:-\S+\s+)*["']?[^\s|;&"']+\.(?:py|[cm]?[jt]s|sh|ps1|rb|pl|R)\b/i,
+  /(?:^|[\s;&|(])["']?\.{1,2}\/[^\s|;&"']+\.(?:sh|py|ps1)\b/,
+  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|build|lint|typecheck|check|e2e)\b/,
+  /\b(?:pytest|tox|nox|mocha|jest|vitest\s+run|playwright\s+test|cargo\s+(?:build|test|check|clippy)|go\s+(?:build|test|vet)|dotnet\s+(?:build|test)|make|mvn|gradlew?)\b/,
+];
+
+// Signs that a command serves or watches until stopped, which rule out FINITE_JOBS.
+const LONG_RUNNING = [
+  /(?:^|[\s:])(?:dev|serve|start|preview|watch)(?=$|[\s:;&|)])/i,
+  /--(?:watch|reload|port|host)\b/,
+  /\btsc\b[^|;&]*\s-w\b/,
+  /(?<![a-z])(?:serve|server|start|dev|watch)(?![a-z])[\w.-]*\.(?:ps1|sh|py|[cm]?[jt]s)\b/i,
+  /(?<![a-z])(?:app|index|wsgi|asgi)\.(?:[cm]?[jt]s|py)\b/i,
+];
+
 /**
- * True when a background shell command waits for something and then ends,
- * rather than running until stopped (a dev server, a file watcher).
+ * True when a background shell command waits for something or runs a job
+ * that ends, rather than running until stopped (a dev server, a file watcher).
  *
  * @param {unknown} command The shell's command line.
  * @returns {boolean}
  */
 export function waitsFor(command) {
-  return typeof command === 'string' && WAIT_COMMANDS.some((re) => re.test(command));
+  if (typeof command !== 'string') return false;
+  if (WAIT_COMMANDS.some((re) => re.test(command))) return true;
+  return FINITE_JOBS.some((re) => re.test(command)) && !LONG_RUNNING.some((re) => re.test(command));
 }
 
 // What glance calls the task types Claude Code lists in background_tasks.
